@@ -420,11 +420,11 @@ public class MessageDecoder {
         //note properties length must not more than Short.MAX
         short propertiesLength = (short) propertiesBytes.length;
         int sysFlag = message.getFlag();
-        int storeSize = 4 // 1 TOTALSIZE
-            + 4 // 2 MAGICCOD
-            + 4 // 3 BODYCRC
-            + 4 // 4 FLAG
-            + 4 + bodyLen // 4 BODY
+        int storeSize = 4 // 1 TOTALSIZE 总行度是4哥字节
+            + 4 // 2 MAGICCOD 魔数是4个字节
+            + 4 // 3 BODYCRC 消息体检验码4个字节
+            + 4 // 4 FLAG  flag是4哥字节
+            + 4 + bodyLen // 4 BODY 消息体长度4哥字节
             + 2 + propertiesLength;
         ByteBuffer byteBuffer = ByteBuffer.allocate(storeSize);
         // 1 TOTALSIZE

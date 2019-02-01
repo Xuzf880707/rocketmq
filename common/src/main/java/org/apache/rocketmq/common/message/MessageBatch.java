@@ -31,6 +31,10 @@ public class MessageBatch extends Message implements Iterable<Message> {
         this.messages = messages;
     }
 
+    /***
+     * 批量发送消息时，会将多条消息进行编码成byte
+     * @return
+     */
     public byte[] encode() {
         return MessageDecoder.encodeMessages(messages);
     }

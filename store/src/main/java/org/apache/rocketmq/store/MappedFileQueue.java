@@ -80,7 +80,7 @@ public class MappedFileQueue {
         if (null == mfs)
             return null;
 
-        for (int i = 0; i < mfs.length; i++) {
+        for (int i = 0; i < mfs.length; i++) {//时间从小到大排序
             MappedFile mappedFile = (MappedFile) mfs[i];
             if (mappedFile.getLastModifiedTimestamp() >= timestamp) {
                 return mappedFile;
@@ -101,7 +101,7 @@ public class MappedFileQueue {
         return mfs;
     }
 
-    public void truncateDirtyFiles(long offset) {
+    public void truncateDirtyFiles(long offset) {//删除脏的文件，定时清理
         List<MappedFile> willRemoveFiles = new ArrayList<MappedFile>();
 
         for (MappedFile file : this.mappedFiles) {
@@ -121,7 +121,7 @@ public class MappedFileQueue {
         this.deleteExpiredFile(willRemoveFiles);
     }
 
-    void deleteExpiredFile(List<MappedFile> files) {
+    void deleteExpiredFile(List<MappedFile> files) {//删除过期的文件
 
         if (!files.isEmpty()) {
 
@@ -193,9 +193,9 @@ public class MappedFileQueue {
 
     public MappedFile getLastMappedFile(final long startOffset, boolean needCreate) {
         long createOffset = -1;
-        MappedFile mappedFileLast = getLastMappedFile();
+        MappedFile mappedFileLast = getLastMappedFile();//获得最新的MappedFile
 
-        if (mappedFileLast == null) {
+        if (mappedFileLast == null) {//如果是新建的第一个MappedFile
             createOffset = startOffset - (startOffset % this.mappedFileSize);
         }
 
