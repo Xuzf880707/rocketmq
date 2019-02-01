@@ -49,8 +49,11 @@ public class RouteInfoManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private final static long BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    //key是主题名称，值是每个主题的队列信息
     private final HashMap<String/* topic */, List<QueueData>> topicQueueTable;
+    //key是broker的名称，值是broker的基础信息，包括brokerName、所属集群名称、主备Broker地址
     private final HashMap<String/* brokerName */, BrokerData> brokerAddrTable;
+    //Broker集群信息，存储集群中所欧broker名称
     private final HashMap<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
     private final HashMap<String/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
     private final HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
@@ -203,30 +206,37 @@ public class RouteInfoManager {
         }
     }
 
+    /***
+     * 为某个broker创建主题topic
+     *      一个topic可能会对应多个broker信息
+     * @param brokerName
+     * @param topicConfig
+     */
     private void createAndUpdateQueueData(final String brokerName, final TopicConfig topicConfig) {
         QueueData queueData = new QueueData();
         queueData.setBrokerName(brokerName);
-        queueData.setWriteQueueNums(topicConfig.getWriteQueueNums());
-        queueData.setReadQueueNums(topicConfig.getReadQueueNums());
-        queueData.setPerm(topicConfig.getPerm());
+        queueData.setWriteQueueNums(topicConfig.getWriteQueueNums());//设置主题的写队列的个数
+        queueData.setReadQueueNums(topicConfig.getReadQueueNums());//设置读队列的读个数
+        queueData.setPerm(topicConfig.getPerm());//设置队列的权限
         queueData.setTopicSynFlag(topicConfig.getTopicSysFlag());
-
+        //先判断topicQueueTable是否已经创建topic的信息，一个topic可能会对应多个broker，并为每隔
         List<QueueData> queueDataList = this.topicQueueTable.get(topicConfig.getTopicName());
-        if (null == queueDataList) {
+        if (null == queueDataList) {//如果是新建topic
             queueDataList = new LinkedList<QueueData>();
             queueDataList.add(queueData);
             this.topicQueueTable.put(topicConfig.getTopicName(), queueDataList);
             log.info("new topic registered, {} {}", topicConfig.getTopicName(), queueData);
-        } else {
+        } else {//如果topic已经存在
             boolean addNewOne = true;
 
             Iterator<QueueData> it = queueDataList.iterator();
+            //检查旧的topicName对应的元信息是否存在，并判断broker是否一致，如果旧的已经存在，则不需要
             while (it.hasNext()) {
                 QueueData qd = it.next();
-                if (qd.getBrokerName().equals(brokerName)) {
-                    if (qd.equals(queueData)) {
+                if (qd.getBrokerName().equals(brokerName)) {//判断broker名称是否一致
+                    if (qd.equals(queueData)) {//判断队列元信息是否一致，如果是的话，则无需再创建新的
                         addNewOne = false;
-                    } else {
+                    } else {//删除元信息不匹配的对象(这个是去除旧的元信息)
                         log.info("topic changed, {} OLD: {} NEW: {}", topicConfig.getTopicName(), qd,
                             queueData);
                         it.remove();

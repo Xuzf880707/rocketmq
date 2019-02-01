@@ -82,6 +82,10 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
 import org.apache.rocketmq.remoting.netty.NettyClientConfig;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
+/***
+ * MQClientInstance封装了RocketMQ网络处理API
+ * 是生产者、消费者和NameServer、Broker打交道的网络通道
+ */
 public class MQClientInstance {
     private final static long LOCK_TIMEOUT_MILLIS = 3000;
     private final InternalLogger log = ClientLogger.getLog();
@@ -187,7 +191,7 @@ public class MQClientInstance {
                     if (null == brokerData) {
                         continue;
                     }
-
+                    //只查找master的
                     if (!brokerData.getBrokerAddrs().containsKey(MixAll.MASTER_ID)) {
                         continue;
                     }
@@ -592,20 +596,23 @@ public class MQClientInstance {
                 try {
                     TopicRouteData topicRouteData;
                     if (isDefault && defaultMQProducer != null) {
+                        //根据默认主题去查询主题的路由信息
                         topicRouteData = this.mQClientAPIImpl.getDefaultTopicRouteInfoFromNameServer(defaultMQProducer.getCreateTopicKey(),
                             1000 * 3);
-                        if (topicRouteData != null) {
+                        if (topicRouteData != null) {//默认的主题路由信息存在，则更新读写队列个数
                             for (QueueData data : topicRouteData.getQueueDatas()) {
                                 int queueNums = Math.min(defaultMQProducer.getDefaultTopicQueueNums(), data.getReadQueueNums());
                                 data.setReadQueueNums(queueNums);
                                 data.setWriteQueueNums(queueNums);
                             }
                         }
-                    } else {
+                    } else {//从nameServer中获得主题的路由信息
                         topicRouteData = this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, 1000 * 3);
                     }
                     if (topicRouteData != null) {
+                        //从本地缓存中获得默认主题的路由信息
                         TopicRouteData old = this.topicRouteTable.get(topic);
+                        //判断路由信息是否发生过变化
                         boolean changed = topicRouteDataIsChange(old, topicRouteData);
                         if (!changed) {
                             changed = this.isNeedUpdateTopicRouteInfo(topic);

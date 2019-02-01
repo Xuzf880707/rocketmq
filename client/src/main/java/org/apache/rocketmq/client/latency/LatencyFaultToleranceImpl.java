@@ -97,9 +97,10 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
     }
 
     class FaultItem implements Comparable<FaultItem> {
+        //条目唯一键，这里是brokerName
         private final String name;
-        private volatile long currentLatency;
-        private volatile long startTimestamp;
+        private volatile long currentLatency;//本次消息发送延迟
+        private volatile long startTimestamp;//本次规避开始时间
 
         public FaultItem(final String name) {
             this.name = name;

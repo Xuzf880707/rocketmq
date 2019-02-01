@@ -142,7 +142,7 @@ public class NamesrvStartup {
             controller.shutdown();
             System.exit(-3);
         }
-
+        //注册JVM钩子函数并启动服务器
         Runtime.getRuntime().addShutdownHook(new ShutdownHookThread(log, new Callable<Void>() {
             @Override
             public Void call() throws Exception {

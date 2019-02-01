@@ -53,10 +53,10 @@ public class ClientConfig {
 
     public String buildMQClientId() {
         StringBuilder sb = new StringBuilder();
-        sb.append(this.getClientIP());
+        sb.append(this.getClientIP());//ip
 
         sb.append("@");
-        sb.append(this.getInstanceName());
+        sb.append(this.getInstanceName());//实例名字
         if (!UtilAll.isBlank(this.unitName)) {
             sb.append("@");
             sb.append(this.unitName);

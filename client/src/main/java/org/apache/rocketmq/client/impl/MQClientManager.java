@@ -29,13 +29,15 @@ public class MQClientManager {
     private final static InternalLogger log = ClientLogger.getLog();
     private static MQClientManager instance = new MQClientManager();
     private AtomicInteger factoryIndexGenerator = new AtomicInteger();
+    //维护了一个客户端id和MQClientInstance的映射关系，同一个jvm中的不同消费者和不同生产者在启动获取到MQClientInstance实例都是同一个
+    //MQClientInstance封装了RocketMQ网络处理API,
     private ConcurrentMap<String/* clientId */, MQClientInstance> factoryTable =
         new ConcurrentHashMap<String, MQClientInstance>();
 
     private MQClientManager() {
 
     }
-
+    //整个JVM实例中只存在一个MQClientManager实例
     public static MQClientManager getInstance() {
         return instance;
     }
