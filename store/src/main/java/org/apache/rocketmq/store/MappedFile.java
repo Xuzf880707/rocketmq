@@ -277,6 +277,7 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
+     * 刷盘 直接调用mappedByteBuffer或者fileChannel将内存中的数据刷到磁盘里
      * @return The current flushed position
      */
     public int flush(final int flushLeastPages) {
@@ -451,16 +452,23 @@ public class MappedFile extends ReferenceResource {
         return true;
     }
 
+    /***
+     * 先释放资源
+     * 再关闭通道
+     * 最后删除文件
+     * @param intervalForcibly
+     * @return
+     */
     public boolean destroy(final long intervalForcibly) {
         this.shutdown(intervalForcibly);
 
-        if (this.isCleanupOver()) {
+        if (this.isCleanupOver()) {//判断是否清理完成
             try {
-                this.fileChannel.close();
+                this.fileChannel.close();//关闭通道
                 log.info("close file channel " + this.fileName + " OK");
 
                 long beginTime = System.currentTimeMillis();
-                boolean result = this.file.delete();
+                boolean result = this.file.delete();//删除文件
                 log.info("delete file[REF:" + this.getRefCount() + "] " + this.fileName
                     + (result ? " OK, " : " Failed, ") + "W:" + this.getWrotePosition() + " M:"
                     + this.getFlushedPosition() + ", "

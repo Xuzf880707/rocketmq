@@ -40,22 +40,29 @@ public abstract class ReferenceResource {
         return this.available;
     }
 
+    /**
+     *关闭 mappedFile
+     * @param intervalForcibly 表示拒绝被销毁的最大时间
+     */
     public void shutdown(final long intervalForcibly) {
-        if (this.available) {
+        if (this.available) {//初次关闭的，这个available为true
             this.available = false;
-            this.firstShutdownTimestamp = System.currentTimeMillis();
-            this.release();
-        } else if (this.getRefCount() > 0) {
-            if ((System.currentTimeMillis() - this.firstShutdownTimestamp) >= intervalForcibly) {
+            this.firstShutdownTimestamp = System.currentTimeMillis();//设置初次关闭的时间
+            this.release();//释放资源，release只有在引用数小于1的时候才会释放资源
+        } else if (this.getRefCount() > 0) {//如果引用数仍然大于0
+            if ((System.currentTimeMillis() - this.firstShutdownTimestamp) >= intervalForcibly) {//如果已经超过了其最大的拒绝销毁时间，则引用数直接设置为-1000，这样就可以释放资源了
                 this.refCount.set(-1000 - this.getRefCount());
                 this.release();
             }
         }
     }
 
+    /**
+     * 减少引用数
+     */
     public void release() {
         long value = this.refCount.decrementAndGet();
-        if (value > 0)
+        if (value > 0)//如果引用数大于0的话，则不能被释放资源，直接返回
             return;
 
         synchronized (this) {
