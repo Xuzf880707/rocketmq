@@ -169,7 +169,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             .option(ChannelOption.SO_RCVBUF, nettyClientConfig.getClientSocketRcvBufSize())
             .handler(new ChannelInitializer<SocketChannel>() {
                 @Override
-                public void initChannel(SocketChannel ch) throws Exception {
+                public void initChannel(SocketChannel ch) {
                     ChannelPipeline pipeline = ch.pipeline();
                     if (nettyClientConfig.isUseTLS()) {
                         if (null != sslContext) {
@@ -188,7 +188,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                         new NettyClientHandler());
                 }
             });
-
+        //开启定时任务，删除等待超时的响应
         this.timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
@@ -670,7 +670,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
 
         @Override
-        public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+        public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
             if (evt instanceof IdleStateEvent) {
                 IdleStateEvent event = (IdleStateEvent) evt;
                 if (event.state().equals(IdleState.ALL_IDLE)) {
@@ -688,7 +688,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
 
         @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
             final String remoteAddress = RemotingHelper.parseChannelRemoteAddr(ctx.channel());
             log.warn("NETTY CLIENT PIPELINE: exceptionCaught {}", remoteAddress);
             log.warn("NETTY CLIENT PIPELINE: exceptionCaught exception.", cause);

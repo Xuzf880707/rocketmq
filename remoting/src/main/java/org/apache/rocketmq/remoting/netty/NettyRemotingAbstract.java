@@ -148,9 +148,8 @@ public abstract class NettyRemotingAbstract {
      *
      * @param ctx Channel handler context.
      * @param msg incoming remoting command.
-     * @throws Exception if there were any error while processing the incoming command.
      */
-    public void processMessageReceived(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
+    public void processMessageReceived(ChannelHandlerContext ctx, RemotingCommand msg) {
         final RemotingCommand cmd = msg;
         if (cmd != null) {
             switch (cmd.getType()) {
@@ -370,6 +369,9 @@ public abstract class NettyRemotingAbstract {
      * This method is periodically invoked to scan and expire deprecated request.
      * </p>
      */
+    /***
+     *被周期性的调用，用来移除响应超时的ResponseFuture
+     */
     public void scanResponseTable() {
         final List<ResponseFuture> rfList = new LinkedList<ResponseFuture>();
         Iterator<Entry<Integer, ResponseFuture>> it = this.responseTable.entrySet().iterator();
@@ -405,7 +407,7 @@ public abstract class NettyRemotingAbstract {
             final SocketAddress addr = channel.remoteAddress();
             channel.writeAndFlush(request).addListener(new ChannelFutureListener() {
                 @Override
-                public void operationComplete(ChannelFuture f) throws Exception {
+                public void operationComplete(ChannelFuture f) {
                     if (f.isSuccess()) {
                         responseFuture.setSendRequestOK(true);
                         return;
@@ -455,7 +457,7 @@ public abstract class NettyRemotingAbstract {
             try {
                 channel.writeAndFlush(request).addListener(new ChannelFutureListener() {
                     @Override
-                    public void operationComplete(ChannelFuture f) throws Exception {
+                    public void operationComplete(ChannelFuture f) {
                         if (f.isSuccess()) {
                             responseFuture.setSendRequestOK(true);
                             return;
@@ -526,7 +528,7 @@ public abstract class NettyRemotingAbstract {
             try {
                 channel.writeAndFlush(request).addListener(new ChannelFutureListener() {
                     @Override
-                    public void operationComplete(ChannelFuture f) throws Exception {
+                    public void operationComplete(ChannelFuture f) {
                         once.release();
                         if (!f.isSuccess()) {
                             log.warn("send a request command to channel <" + channel.remoteAddress() + "> failed.");

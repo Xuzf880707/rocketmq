@@ -49,6 +49,14 @@ public class Validators {
     /**
      * Validate group
      */
+    /***
+     * 校验生产者组名
+     *      不能为空
+     *      不能超过255，也就是2个字节
+     *      只能包含数字和字母
+     * @param group
+     * @throws MQClientException
+     */
     public static void checkGroup(String group) throws MQClientException {
         if (UtilAll.isBlank(group)) {
             throw new MQClientException("the specified group is blank", null);

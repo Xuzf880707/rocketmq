@@ -26,6 +26,7 @@ import java.util.List;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 
 public class TopicRouteData extends RemotingSerializable {
+    //topic排序的配置
     private String orderTopicConf;
     private List<QueueData> queueDatas;
     private List<BrokerData> brokerDatas;
@@ -121,11 +122,8 @@ public class TopicRouteData extends RemotingSerializable {
         } else if (!queueDatas.equals(other.queueDatas))
             return false;
         if (filterServerTable == null) {
-            if (other.filterServerTable != null)
-                return false;
-        } else if (!filterServerTable.equals(other.filterServerTable))
-            return false;
-        return true;
+            return other.filterServerTable == null;
+        } else return filterServerTable.equals(other.filterServerTable);
     }
 
     @Override

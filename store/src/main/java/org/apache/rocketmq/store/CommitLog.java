@@ -44,24 +44,52 @@ import org.apache.rocketmq.store.schedule.ScheduleMessageService;
  */
 public class CommitLog {
     // Message's MAGIC CODE daa320a7
+    /***
+     * 消息的魔数，标记某一段记录为消息
+     */
     public final static int MESSAGE_MAGIC_CODE = -626843481;
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
     // End of file empty MAGIC CODE cbd43194
+    /***
+     * 标记某一段为空白填充符，如果CommitLog剩余的空间不够长的时候，会用该符号进行填充
+     */
     private final static int BLANK_MAGIC_CODE = -875286124;
-    //可以看成是CommitLog的文件夹
+    /***
+     * 映射存储文件所在的文件夹，里面存放了真正的持久化文件
+     * 可以看成是CommitLog的文件夹
+     */
+
     private final MappedFileQueue mappedFileQueue;
+    /***
+     * 默认的消息存储
+     */
     private final DefaultMessageStore defaultMessageStore;
+    /**
+     * 将内存中的commitLog数据真正flush冲刷到磁盘文件里的服务
+     */
     private final FlushCommitLogService flushCommitLogService;
 
     //If TransientStorePool enabled, we must flush message to FileChannel at fixed periods
+    /***
+     * 将内存中的commitLog数据提交到FileChannel，该FileChannel连接磁盘文件
+     */
     private final FlushCommitLogService commitLogService;
     //添加信息成功后回调的函数
     private final AppendMessageCallback appendMessageCallback;
+    //TODO
     private final ThreadLocal<MessageExtBatchEncoder> batchEncoderThreadLocal;
+    /**
+     * topic消息队列 与 offset 的Map
+     */
     private HashMap<String/* topic-queueid */, Long/* offset */> topicQueueTable = new HashMap<String, Long>(1024);
+    //TODO
     private volatile long confirmOffset = -1L;
 
     private volatile long beginTimeInLock = 0;
+    /**
+     * 获得写消息的锁，写完会释放锁
+     *
+     */
     private final PutMessageLock putMessageLock;
 
     public CommitLog(final DefaultMessageStore defaultMessageStore) {

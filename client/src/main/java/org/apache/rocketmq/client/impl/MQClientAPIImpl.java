@@ -221,6 +221,9 @@ public class MQClientAPIImpl {
         this.remotingClient.updateNameServerAddressList(list);
     }
 
+    /***
+     * 开始启动远程服务调用
+     */
     public void start() {
         this.remotingClient.start();
     }
@@ -231,7 +234,7 @@ public class MQClientAPIImpl {
 
     public void createSubscriptionGroup(final String addr, final SubscriptionGroupConfig config,
         final long timeoutMillis)
-        throws RemotingException, MQBrokerException, InterruptedException, MQClientException {
+        throws RemotingException, InterruptedException, MQClientException {
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.UPDATE_AND_CREATE_SUBSCRIPTIONGROUP, null);
 
         byte[] body = RemotingSerializable.encode(config);
@@ -254,7 +257,7 @@ public class MQClientAPIImpl {
 
     public void createTopic(final String addr, final String defaultTopic, final TopicConfig topicConfig,
         final long timeoutMillis)
-        throws RemotingException, MQBrokerException, InterruptedException, MQClientException {
+        throws RemotingException, InterruptedException, MQClientException {
         CreateTopicRequestHeader requestHeader = new CreateTopicRequestHeader();
         requestHeader.setTopic(topicConfig.getTopicName());
         requestHeader.setDefaultTopic(defaultTopic);
@@ -907,7 +910,7 @@ public class MQClientAPIImpl {
         final EndTransactionRequestHeader requestHeader,
         final String remark,
         final long timeoutMillis
-    ) throws RemotingException, MQBrokerException, InterruptedException {
+    ) throws RemotingException, InterruptedException {
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.END_TRANSACTION, requestHeader);
 
         request.setRemark(remark);
@@ -920,7 +923,7 @@ public class MQClientAPIImpl {
         final long timeoutMillis,
         final InvokeCallback invokeCallback,
         final Boolean isUnqiueKey
-    ) throws RemotingException, MQBrokerException, InterruptedException {
+    ) throws RemotingException, InterruptedException {
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.QUERY_MESSAGE, requestHeader);
         request.addExtField(MixAll.UNIQUE_MSG_QUERY_FLAG, isUnqiueKey.toString());
         this.remotingClient.invokeAsync(MixAll.brokerVIPChannel(this.clientConfig.isVipChannelEnabled(), addr), request, timeoutMillis,
@@ -1276,7 +1279,7 @@ public class MQClientAPIImpl {
     }
 
     public void deleteTopicInBroker(final String addr, final String topic, final long timeoutMillis)
-        throws RemotingException, MQBrokerException, InterruptedException, MQClientException {
+        throws RemotingException, InterruptedException, MQClientException {
         DeleteTopicRequestHeader requestHeader = new DeleteTopicRequestHeader();
         requestHeader.setTopic(topic);
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.DELETE_TOPIC_IN_BROKER, requestHeader);
@@ -1296,7 +1299,7 @@ public class MQClientAPIImpl {
     }
 
     public void deleteTopicInNameServer(final String addr, final String topic, final long timeoutMillis)
-        throws RemotingException, MQBrokerException, InterruptedException, MQClientException {
+        throws RemotingException, InterruptedException, MQClientException {
         DeleteTopicRequestHeader requestHeader = new DeleteTopicRequestHeader();
         requestHeader.setTopic(topic);
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.DELETE_TOPIC_IN_NAMESRV, requestHeader);
@@ -1315,7 +1318,7 @@ public class MQClientAPIImpl {
     }
 
     public void deleteSubscriptionGroup(final String addr, final String groupName, final long timeoutMillis)
-        throws RemotingException, MQBrokerException, InterruptedException, MQClientException {
+        throws RemotingException, InterruptedException, MQClientException {
         DeleteSubscriptionGroupRequestHeader requestHeader = new DeleteSubscriptionGroupRequestHeader();
         requestHeader.setGroupName(groupName);
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.DELETE_SUBSCRIPTIONGROUP, requestHeader);
@@ -1913,8 +1916,7 @@ public class MQClientAPIImpl {
     }
 
     public Set<String> getClusterList(String topic,
-        long timeoutMillis) throws MQClientException, RemotingConnectException,
-        RemotingSendRequestException, RemotingTimeoutException, InterruptedException {
+        long timeoutMillis) {
         return Collections.EMPTY_SET;
     }
 
@@ -1981,7 +1983,7 @@ public class MQClientAPIImpl {
 
     public void updateNameServerConfig(final Properties properties, final List<String> nameServers, long timeoutMillis)
         throws UnsupportedEncodingException,
-        MQBrokerException, InterruptedException, RemotingTimeoutException, RemotingSendRequestException,
+            InterruptedException, RemotingTimeoutException, RemotingSendRequestException,
         RemotingConnectException, MQClientException {
         String str = MixAll.properties2String(properties);
         if (str == null || str.length() < 1) {

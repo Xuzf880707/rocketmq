@@ -27,10 +27,13 @@ import org.apache.rocketmq.remoting.RPCHook;
 
 public class MQClientManager {
     private final static InternalLogger log = ClientLogger.getLog();
+
     private static MQClientManager instance = new MQClientManager();
     private AtomicInteger factoryIndexGenerator = new AtomicInteger();
     //维护了一个客户端id和MQClientInstance的映射关系，同一个jvm中的不同消费者和不同生产者在启动获取到MQClientInstance实例都是同一个
     //MQClientInstance封装了RocketMQ网络处理API,
+    //根据{clientId, MQClientInstance }避免重复重现MQClientInstance
+    //clientId:clientIp+'@'+rocketmq.client.name配置的name
     private ConcurrentMap<String/* clientId */, MQClientInstance> factoryTable =
         new ConcurrentHashMap<String, MQClientInstance>();
 
@@ -46,13 +49,25 @@ public class MQClientManager {
         return getAndCreateMQClientInstance(clientConfig, null);
     }
 
+    /***
+     * MQClientInstance实例是根据以下信息创建：
+     *      clientId:
+     *        clientIp：客户端ip
+     *        instanceName：根据rocketmq.client.name配置
+     *
+     *
+     * @param clientConfig
+     * @param rpcHook
+     * @return
+     */
     public MQClientInstance getAndCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
         String clientId = clientConfig.buildMQClientId();
         MQClientInstance instance = this.factoryTable.get(clientId);
-        if (null == instance) {
+        if (null == instance) {//如果本地缓存不存在的话，新建一个
             instance =
                 new MQClientInstance(clientConfig.cloneClientConfig(),
                     this.factoryIndexGenerator.getAndIncrement(), clientId, rpcHook);
+            //村放到本地缓存，利用ConcurrentHashMap避免并发问题，保证一个客户端id只会创建一个MQClientInstance
             MQClientInstance prev = this.factoryTable.putIfAbsent(clientId, instance);
             if (prev != null) {
                 instance = prev;

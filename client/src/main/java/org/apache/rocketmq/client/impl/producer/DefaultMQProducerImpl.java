@@ -110,12 +110,18 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     public DefaultMQProducerImpl(final DefaultMQProducer defaultMQProducer) {
         this(defaultMQProducer, null);
     }
-
+    //TODO rpcHook
+    /***
+     *
+     * @param defaultMQProducer
+     * @param rpcHook
+     */
     public DefaultMQProducerImpl(final DefaultMQProducer defaultMQProducer, RPCHook rpcHook) {
         this.defaultMQProducer = defaultMQProducer;
         this.rpcHook = rpcHook;
-
+        //每个Producer都会持有一个用来存放异步发送消息队列
         this.asyncSenderThreadPoolQueue = new LinkedBlockingQueue<Runnable>(50000);
+        //创建一个线程池，线程固定只包含和计算机核数一样多的线程，等待队列最多只能包含50000条待发送的消息
         this.defaultAsyncSenderExecutor = new ThreadPoolExecutor(
             Runtime.getRuntime().availableProcessors(),
             Runtime.getRuntime().availableProcessors(),
@@ -132,6 +138,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             });
     }
 
+    /***
+     * 注册检查消息的钩子，可以用来验证待发送的消息
+     * @param checkForbiddenHook
+     */
     public void registerCheckForbiddenHook(CheckForbiddenHook checkForbiddenHook) {
         this.checkForbiddenHookList.add(checkForbiddenHook);
         log.info("register a new checkForbiddenHook. hookName={}, allHookSize={}", checkForbiddenHook.hookName(),
@@ -168,19 +178,26 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         this.start(true);
     }
 
+    /***
+     *
+     * @param startFactory 默认是true
+     * @throws MQClientException
+     */
     public void start(final boolean startFactory) throws MQClientException {
-        switch (this.serviceState) {
-            case CREATE_JUST:
+        switch (this.serviceState) {//判断生产者的状态
+            case CREATE_JUST: //初次创建的话
+                //标记初始化失败，这样可以避免并发初始化的问题
                 this.serviceState = ServiceState.START_FAILED;
-                //检查相关配置
+                //检查相关配置，主要是生产组名校验
                 this.checkConfig();
 
                 if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
                     this.defaultMQProducer.changeInstanceNameToPID();
                 }
-                //获得或创建一个MQClientInstance用于网络连接
+                //获得或创建一个MQClientInstance用于网络连接，并绑定rpc调用的钩子。一个客户端id（包括客户端ip和客户端名称）只能创建一个实例
                 this.mQClientFactory = MQClientManager.getInstance().getAndCreateMQClientInstance(this.defaultMQProducer, rpcHook);
-                //注册这个生产者，将自己加入到MQClientInstance管理中，方便后续调用网络请求，进行心跳检测
+                //注册这个生产者，将自己加入到 MQClientInstance 管理中，方便后续调用网络请求，进行心跳检测
+                //根据 {grouName,DefaultMQProducerImpl} 维护MQClientInstance.producerTable，如果组名已存在，则更新失败，返回false。所以说groupName不能重复
                 boolean registerOK = mQClientFactory.registerProducer(this.defaultMQProducer.getProducerGroup(), this);
                 if (!registerOK) {
                     this.serviceState = ServiceState.CREATE_JUST;
@@ -188,7 +205,9 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         + "] has been created before, specify another name please." + FAQUrl.suggestTodo(FAQUrl.GROUP_NAME_DUPLICATE_URL),
                         null);
                 }
-
+                /***
+                 * 本地缓存topicPublishInfoTable存放了topickey和主题信息的映射关系
+                 */
                 this.topicPublishInfoTable.put(this.defaultMQProducer.getCreateTopicKey(), new TopicPublishInfo());
                 //启动MQClientInstance，如果MQClientInstance已经启动，本次并不会真正执行
                 if (startFactory) {
@@ -197,7 +216,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
                 log.info("the producer [{}] start OK. sendMessageWithVIPChannel={}", this.defaultMQProducer.getProducerGroup(),
                     this.defaultMQProducer.isSendMessageWithVIPChannel());
-                this.serviceState = ServiceState.RUNNING;
+                this.serviceState = ServiceState.RUNNING;//设置生产者的启动状态
                 break;
             case RUNNING:
             case START_FAILED:
@@ -213,6 +232,14 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
     }
 
+    /**
+     *  校验生产者组名
+     *     不能为空
+     *     不能超过255，也就是2个字节
+     *     只能包含数字和字母
+     *     不能是'DEFAULT_PRODUCER'
+     * @throws MQClientException
+     */
     private void checkConfig() throws MQClientException {
         Validators.checkGroup(this.defaultMQProducer.getProducerGroup());
 
