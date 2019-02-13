@@ -485,7 +485,7 @@ public class ConsumeQueue {
     public SelectMappedBufferResult getIndexBuffer(final long startIndex) {
         int mappedFileSize = this.mappedFileSize;
         long offset = startIndex * CQ_STORE_UNIT_SIZE;
-        if (offset >= this.getMinLogicOffset()) {
+        if (offset >= this.getMinLogicOffset()) {//判断消息是否已被删除
             MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset);
             if (mappedFile != null) {
                 SelectMappedBufferResult result = mappedFile.selectMappedBuffer((int) (offset % mappedFileSize));
