@@ -116,12 +116,19 @@ public class CommitLog {
 
     }
 
+    /***
+     * 加载所有的MappedFile，存放到本地内存，并按照名称排序
+     * @return
+     */
     public boolean load() {
         boolean result = this.mappedFileQueue.load();
         log.info("load commit log " + (result ? "OK" : "Failed"));
         return result;
     }
 
+    /***
+     * 开始将commitLog日志从buffer缓冲区中冲刷到磁盘
+     */
     public void start() {
         this.flushCommitLogService.start();
 
@@ -838,12 +845,18 @@ public class CommitLog {
         return -1;
     }
 
+    /***
+     * 获取当前CommitLog目录最小偏移量
+     * @return
+     */
     public long getMinOffset() {
+        //获取目录下的第一个文件
         MappedFile mappedFile = this.mappedFileQueue.getFirstMappedFile();
         if (mappedFile != null) {
-            if (mappedFile.isAvailable()) {
-                return mappedFile.getFileFromOffset();
+            if (mappedFile.isAvailable()) {//判断文件是否可用
+                return mappedFile.getFileFromOffset();//返回该文件的起始偏移量
             } else {
+                //返回下一个文件的起始偏移量
                 return this.rollNextFile(mappedFile.getFileFromOffset());
             }
         }
@@ -851,17 +864,33 @@ public class CommitLog {
         return -1;
     }
 
+    /***
+     * 根据偏移量与消息长度查找消息
+     * @param offset
+     * @param size
+     * @return
+     */
     public SelectMappedBufferResult getMessage(final long offset, final int size) {
+        //获得每个文件的大小
         int mappedFileSize = this.defaultMessageStore.getMessageStoreConfig().getMapedFileSizeCommitLog();
+        //查找offset所处的MappedFile
         MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset, offset == 0);
         if (mappedFile != null) {
+            //根据offset查找在物理文件里的偏移量
             int pos = (int) (offset % mappedFileSize);
+            //根据文件内的起始偏移量和读取长度size获得内容返回
             return mappedFile.selectMappedBuffer(pos, size);
         }
         return null;
     }
 
+    /***
+     * 返回下一个文件的起始偏移量
+     * @param offset
+     * @return
+     */
     public long rollNextFile(final long offset) {
+        //获得一个文件的大小
         int mappedFileSize = this.defaultMessageStore.getMessageStoreConfig().getMapedFileSizeCommitLog();
         return offset + mappedFileSize - offset % mappedFileSize;
     }
@@ -924,6 +953,9 @@ public class CommitLog {
         return diff;
     }
 
+    /***
+     * 将日志冲刷到磁盘里
+     */
     abstract class FlushCommitLogService extends ServiceThread {
         protected static final int RETRY_TIMES_OVER = 10;
     }
@@ -940,9 +972,12 @@ public class CommitLog {
         @Override
         public void run() {
             CommitLog.log.info(this.getServiceName() + " service started");
-            while (!this.isStopped()) {
+            while (!this.isStopped()) {//线程是运行状态的
+                //判断定时冲刷的时间间隔配置
                 int interval = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getCommitIntervalCommitLog();
-
+                /***
+                 * 获得已冲刷的最新页
+                 */
                 int commitDataLeastPages = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getCommitCommitLogLeastPages();
 
                 int commitDataThoroughInterval =

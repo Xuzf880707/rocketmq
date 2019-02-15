@@ -306,6 +306,11 @@ public class MappedFile extends ReferenceResource {
         return this.getFlushedPosition();
     }
 
+    /***
+     * 将commitLog冲刷到FileChannel，这里只有打开缓冲池的话才会进行提交
+     * @param commitLeastPages
+     * @return
+     */
     public int commit(final int commitLeastPages) {
         if (writeBuffer == null) {//直接返回wrotePosition指针，无需commit，说明commit的主体实际上是writeBuffer
             //no need to commit data to file channel, so just regard wrotePosition as committedPosition.

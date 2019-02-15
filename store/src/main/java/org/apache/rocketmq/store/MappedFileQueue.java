@@ -459,6 +459,12 @@ public class MappedFileQueue {
      * @param returnFirstOnNotFound If the mapped file is not found, then return the first one.
      * @return Mapped file or null (when not found and returnFirstOnNotFound is <code>false</code>).
      */
+    /***
+     * 根据offset定位物理偏移量，也就是物理文件
+     * @param offset
+     * @param returnFirstOnNotFound
+     * @return
+     */
     public MappedFile findMappedFileByOffset(final long offset, final boolean returnFirstOnNotFound) {
         try {
             MappedFile firstMappedFile = this.getFirstMappedFile();
