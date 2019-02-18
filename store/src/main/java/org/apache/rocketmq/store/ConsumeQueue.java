@@ -151,10 +151,18 @@ public class ConsumeQueue {
         }
     }
 
+    /***
+     * 根据存储时间来查找具体消息
+     *  根据二分查找法加速检索
+     * @param timestamp
+     * @return
+     */
     public long getOffsetInQueueByTime(final long timestamp) {
+        //根据时间戳定位到物理文件
         MappedFile mappedFile = this.mappedFileQueue.getMappedFileByTime(timestamp);
         if (mappedFile != null) {
             long offset = 0;
+            //计算最低查找偏移量
             int low = minLogicOffset > mappedFile.getFileFromOffset() ? (int) (minLogicOffset - mappedFile.getFileFromOffset()) : 0;
             int high = 0;
             int midOffset = -1, targetOffset = -1, leftOffset = -1, rightOffset = -1;
@@ -482,12 +490,22 @@ public class ConsumeQueue {
         }
     }
 
+    /***
+     * startIndex是消息消费队列的条目数
+     *      根据逻辑偏移量获取该消息的buffer块
+     * @param startIndex
+     * @return
+     */
     public SelectMappedBufferResult getIndexBuffer(final long startIndex) {
         int mappedFileSize = this.mappedFileSize;
-        long offset = startIndex * CQ_STORE_UNIT_SIZE;
-        if (offset >= this.getMinLogicOffset()) {//判断消息是否已被删除
+        //CQ_STORE_UNIT_SIZE是每个consumeQueue条目的大小：20
+        long offset = startIndex * CQ_STORE_UNIT_SIZE;//获得消息在consumequeue里的物理偏移量
+        //判断消息是否已被删除
+        if (offset >= this.getMinLogicOffset()) {//如果消息未被删除
+            //根据consumequeue的条目，获得该offset映射的 consumequeue 所在的mappedFile，所以这里的mappedFileQueue是consumequeue所在的文件夹
             MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset);
             if (mappedFile != null) {
+                //从查找到的mappedFile里根据指定offset连续获取20个字节并返回
                 SelectMappedBufferResult result = mappedFile.selectMappedBuffer((int) (offset % mappedFileSize));
                 return result;
             }

@@ -1141,20 +1141,15 @@ public class DefaultMessageStore implements MessageStore {
                 return true;
             }
 
-            if (messageTotal > this.messageStoreConfig.getMaxTransferCountOnMessageInDisk() - 1) {
-                return true;
-            }
+            return messageTotal > this.messageStoreConfig.getMaxTransferCountOnMessageInDisk() - 1;
         } else {
             if ((bufferTotal + sizePy) > this.messageStoreConfig.getMaxTransferBytesOnMessageInMemory()) {
                 return true;
             }
 
-            if (messageTotal > this.messageStoreConfig.getMaxTransferCountOnMessageInMemory() - 1) {
-                return true;
-            }
+            return messageTotal > this.messageStoreConfig.getMaxTransferCountOnMessageInMemory() - 1;
         }
 
-        return false;
     }
 
     private void deleteFile(final String fileName) {
@@ -1437,6 +1432,9 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    /***
+     * 创建indexFile
+      */
     class CommitLogDispatcherBuildIndex implements CommitLogDispatcher {
 
         @Override

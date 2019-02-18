@@ -33,6 +33,7 @@ public class IndexFile {
     private static int indexSize = 20;
     private static int invalidIndex = 0;
     private final int hashSlotNum;
+    //允许的最大条目数
     private final int indexNum;
     private final MappedFile mappedFile;
     private final FileChannel fileChannel;
@@ -80,7 +81,7 @@ public class IndexFile {
             log.info("flush index file eclipse time(ms) " + (System.currentTimeMillis() - beginTime));
         }
     }
-
+    //如果当前已使用条目大于等于允许最大条目数时，表示已写满
     public boolean isWriteFull() {
         return this.indexHeader.getIndexCount() >= this.indexNum;
     }
@@ -89,11 +90,21 @@ public class IndexFile {
         return this.mappedFile.destroy(intervalForcibly);
     }
 
+    /***
+     *
+     * @param key 消息的key
+     * @param phyOffset 消息的物理地址(commitLog里的物理地址)
+     * @param storeTimestamp
+     * @return
+     */
     public boolean putKey(final String key, final long phyOffset, final long storeTimestamp) {
-        if (this.indexHeader.getIndexCount() < this.indexNum) {
-            int keyHash = indexKeyHashMethod(key);
-            int slotPos = keyHash % this.hashSlotNum;
-            int absSlotPos = IndexHeader.INDEX_HEADER_SIZE + slotPos * hashSlotSize;
+
+        if (this.indexHeader.getIndexCount() < this.indexNum) {//如果当前已使用条目小于允许最大条目数时，表示还未写满，则存入当前文件中，如果超出，则返回false,表示存入失败，IndexService中有重试机制，默认重试3次
+            int keyHash = indexKeyHashMethod(key);//计算key的hashcode
+            int slotPos = keyHash % this.hashSlotNum;//计算key所映射的哈希槽
+            //hashSlotSize：哈希槽的大小，等于4。这里计算hashcode所在的哈希槽的物理地址
+            //根据key所算出来的hashslot的下标计算出绝对位置，从这里可以看出端倪：IndexFile的文件布局：文件头(IndexFileHeader 20个字节) + (hashSlotNum * 4)
+            int absSlotPos = IndexHeader.INDEX_HEADER_SIZE + slotPos * hashSlotSize;//计算hash所对应的哈希槽所在的物理地址(在IndexFile文件中)，它是IndexHeader头部加上对应的哈希槽的下标乘以每个hash槽的大小4
 
             FileLock fileLock = null;
 
@@ -101,11 +112,13 @@ public class IndexFile {
 
                 // fileLock = this.fileChannel.lock(absSlotPos, hashSlotSize,
                 // false);
-                int slotValue = this.mappedByteBuffer.getInt(absSlotPos);
+                //读取key所在hashslot下标处的值(4个字节)
+                int slotValue = this.mappedByteBuffer.getInt(absSlotPos);//读取hash槽中存储的数据
+                //如果哈希槽中存储的数据小于0或大于当前索引文件中的索引条目，则设置为0
                 if (slotValue <= invalidIndex || slotValue > this.indexHeader.getIndexCount()) {
                     slotValue = invalidIndex;
                 }
-
+                //计算时间间隔：消息的存储时间与当前IndexFile存放的最小时间差额(单位为秒）
                 long timeDiff = storeTimestamp - this.indexHeader.getBeginTimestamp();
 
                 timeDiff = timeDiff / 1000;
@@ -117,23 +130,28 @@ public class IndexFile {
                 } else if (timeDiff < 0) {
                     timeDiff = 0;
                 }
-
+                //计算该key存放的条目的起始位置，等于=文件头(IndexFileHeader 20个字节) + (hashSlotNum * 4) + IndexSize(一个条目20个字节) * 当前存放的条目数量。所以不会有覆盖的现象
                 int absIndexPos =
                     IndexHeader.INDEX_HEADER_SIZE + this.hashSlotNum * hashSlotSize
                         + this.indexHeader.getIndexCount() * indexSize;
-
+                //开始存放Index条目
+                //存放唯一键的hashcode(4个字节)
                 this.mappedByteBuffer.putInt(absIndexPos, keyHash);
+                //存放开始存放消息在commitlog文件中的物理地址(8个字节)
                 this.mappedByteBuffer.putLong(absIndexPos + 4, phyOffset);
+                //commitlog存储时间与indexfile第一个条目的时间差，单位秒（4字节）
                 this.mappedByteBuffer.putInt(absIndexPos + 4 + 8, (int) timeDiff);
+                //key所在hashslot下标处的值(4个字节)，注意，每个index条目的最后4个字节存放的就是上一个hashcode落到相同哈希槽的key的位置条目位置(这样即使hashslot保存的是最新的index条目的位置也不害怕)
                 this.mappedByteBuffer.putInt(absIndexPos + 4 + 8 + 4, slotValue);
-
+                //将当前先添加的条目的位置(条目数就是条目的位置下标)，存入到key的hashcode所映射求余的hash槽
+                //注意，如果后面来一个key，它的hashcode计算后落到同一个哈希槽，那么就会覆盖之前的旧的index条目的位置，所以该哈希槽存放的是对应hashcode(哈希求余后相同)最新的index条目的位置
                 this.mappedByteBuffer.putInt(absSlotPos, this.indexHeader.getIndexCount());
 
-                if (this.indexHeader.getIndexCount() <= 1) {
+                if (this.indexHeader.getIndexCount() <= 1) {//维护第一条条目的时候记得也维护下起始物理位置和开始存储时间(都是在commitlog文件中的物理地址和存储时间)
                     this.indexHeader.setBeginPhyOffset(phyOffset);
                     this.indexHeader.setBeginTimestamp(storeTimestamp);
                 }
-
+                //更新IndexFile头部相关字段：最大时间 使用的哈希槽数
                 this.indexHeader.incHashSlotCount();
                 this.indexHeader.incIndexCount();
                 this.indexHeader.setEndPhyOffset(phyOffset);

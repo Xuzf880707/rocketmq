@@ -193,19 +193,23 @@ public class IndexService {
 
         return new QueryOffsetResult(phyOffsets, indexLastUpdateTimestamp, indexLastUpdatePhyoffset);
     }
-
+    //主题#key
     private String buildKey(final String topic, final String key) {
         return topic + "#" + key;
     }
 
+    /***
+     * 开始创建索引
+     * @param req
+     */
     public void buildIndex(DispatchRequest req) {
-        IndexFile indexFile = retryGetAndCreateIndexFile();
+        IndexFile indexFile = retryGetAndCreateIndexFile();//创建或获取当前写入的IndexFile
         if (indexFile != null) {
-            long endPhyOffset = indexFile.getEndPhyOffset();
+            long endPhyOffset = indexFile.getEndPhyOffset();//获得IndexFile的最大物理偏移量
             DispatchRequest msg = req;
-            String topic = msg.getTopic();
-            String keys = msg.getKeys();
-            if (msg.getCommitLogOffset() < endPhyOffset) {
+            String topic = msg.getTopic();//获得主题
+            String keys = msg.getKeys();//获得消息key
+            if (msg.getCommitLogOffset() < endPhyOffset) {//如果indexfile中的最大偏移量大于该消息的commitlog offset，忽略本次构建
                 return;
             }
 
@@ -219,7 +223,7 @@ public class IndexService {
                     return;
             }
 
-            if (req.getUniqKey() != null) {
+            if (req.getUniqKey() != null) {//如果 uniq_keys不为空，将消息中的keys,uniq_keys写入index文件中
                 indexFile = putKey(indexFile, msg, buildKey(topic, req.getUniqKey()));
                 if (indexFile == null) {
                     log.error("putKey error commitlog {} uniqkey {}", req.getCommitLogOffset(), req.getUniqKey());
@@ -245,6 +249,14 @@ public class IndexService {
         }
     }
 
+    /***
+     *
+     * @param indexFile
+     * @param msg
+     * @param idxKey
+     *      消息唯一键，与消息ID不一样，为什么呢？因为消息ID在commitlog文件中并不是唯一的，消息消费重试时，发送的消息的消息ID与原先的一样
+     * @return
+     */
     private IndexFile putKey(IndexFile indexFile, DispatchRequest msg, String idxKey) {
         for (boolean ok = indexFile.putKey(idxKey, msg.getCommitLogOffset(), msg.getStoreTimestamp()); !ok; ) {
             log.warn("Index file [" + indexFile.getFileName() + "] is full, trying to create another one");
@@ -289,6 +301,10 @@ public class IndexService {
         return indexFile;
     }
 
+    /***
+     * 获得最新的IndexFile文件
+     * @return
+     */
     public IndexFile getAndCreateLastIndexFile() {
         IndexFile indexFile = null;
         IndexFile prevIndexFile = null;
