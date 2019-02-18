@@ -208,7 +208,7 @@ public class IndexFile {
      * 根据key得到hashcode,然后从最新的条目开始找，匹配时间戳是否有效，得到消息的物理地址（存放在commitlog文件中），然后就可以根据commitlog偏移量找到具体的消息，从而得到最终的key-value。
      * @param phyOffsets 符合查找条件的物理偏移量(commitlog文件中的偏移量)
      * @param key 索引键值，待查找的key
-     * @param maxNum
+     * @param maxNum 本次查找最大的消息条数
      * @param begin 开始时间戳（毫秒）
      * @param end 结束时间戳（毫秒）
      * @param lock
