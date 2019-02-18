@@ -204,6 +204,15 @@ public class IndexFile {
         return result;
     }
 
+    /***
+     * 根据key得到hashcode,然后从最新的条目开始找，匹配时间戳是否有效，得到消息的物理地址（存放在commitlog文件中），然后就可以根据commitlog偏移量找到具体的消息，从而得到最终的key-value。
+     * @param phyOffsets
+     * @param key
+     * @param maxNum
+     * @param begin
+     * @param end
+     * @param lock
+     */
     public void selectPhyOffset(final List<Long> phyOffsets, final String key, final int maxNum,
         final long begin, final long end, boolean lock) {
         if (this.mappedFile.hold()) {
