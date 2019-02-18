@@ -206,17 +206,18 @@ public class IndexFile {
 
     /***
      * 根据key得到hashcode,然后从最新的条目开始找，匹配时间戳是否有效，得到消息的物理地址（存放在commitlog文件中），然后就可以根据commitlog偏移量找到具体的消息，从而得到最终的key-value。
-     * @param phyOffsets
-     * @param key
+     * @param phyOffsets 符合查找条件的物理偏移量(commitlog文件中的偏移量)
+     * @param key 索引键值，待查找的key
      * @param maxNum
-     * @param begin
-     * @param end
+     * @param begin 开始时间戳（毫秒）
+     * @param end 结束时间戳（毫秒）
      * @param lock
      */
     public void selectPhyOffset(final List<Long> phyOffsets, final String key, final int maxNum,
         final long begin, final long end, boolean lock) {
         if (this.mappedFile.hold()) {
             int keyHash = indexKeyHashMethod(key);
+            //根据key算出hashcode,然后定位到hash槽的位置
             int slotPos = keyHash % this.hashSlotNum;
             int absSlotPos = IndexHeader.INDEX_HEADER_SIZE + slotPos * hashSlotSize;
 
@@ -232,10 +233,11 @@ public class IndexFile {
                 // fileLock.release();
                 // fileLock = null;
                 // }
-
+                //如果该位置存储的值小于0,或者大于当前indexCount的值，则视为无效，也就是该hashcode值并没有对应的index条码存储，如果等于0或小于当前条目的大小，则表示至少存储了一个。
                 if (slotValue <= invalidIndex || slotValue > this.indexHeader.getIndexCount()
                     || this.indexHeader.getIndexCount() <= 1) {
                 } else {
+                    //找到条目内容，然后与查询条件进行匹配，如果符合，则将物理偏移量加入到phyOffsets中，否则，继续寻找。
                     for (int nextIndexToRead = slotValue; ; ) {
                         if (phyOffsets.size() >= maxNum) {
                             break;
