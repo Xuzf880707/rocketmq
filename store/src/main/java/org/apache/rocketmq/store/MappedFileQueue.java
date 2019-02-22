@@ -144,6 +144,10 @@ public class MappedFileQueue {
         }
     }
 
+    /**
+     *
+     * @return
+     */
     public boolean load() {
         File dir = new File(this.storePath);
         File[] files = dir.listFiles();
@@ -152,7 +156,7 @@ public class MappedFileQueue {
             Arrays.sort(files);
             for (File file : files) {
 
-                if (file.length() != this.mappedFileSize) {
+                if (file.length() != this.mappedFileSize) {//如果文件大小与配置文件的单个文件大小不一致，将忽略被该目录下所有文件
                     log.warn(file + "\t" + file.length()
                         + " length not matched message store config value, ignore it");
                     return true;

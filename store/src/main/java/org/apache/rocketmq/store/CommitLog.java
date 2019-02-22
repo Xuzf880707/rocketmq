@@ -204,10 +204,11 @@ public class CommitLog {
                 index = 0;
 
             MappedFile mappedFile = mappedFiles.get(index);
-            ByteBuffer byteBuffer = mappedFile.sliceByteBuffer();
-            long processOffset = mappedFile.getFileFromOffset();
-            long mappedFileOffset = 0;
+            ByteBuffer byteBuffer = mappedFile.sliceByteBuffer();//创建一个跟文件共享内存的ByteBuffer
+            long processOffset = mappedFile.getFileFromOffset();//获得ByteBuffer的开始偏移量
+            long mappedFileOffset = 0;//为当前文件已验证通过的offset
             while (true) {
+                //检查文件是否损坏
                 DispatchRequest dispatchRequest = this.checkMessageAndReturnSize(byteBuffer, checkCRCOnRecover);
                 int size = dispatchRequest.getMsgSize();
                 // Normal data

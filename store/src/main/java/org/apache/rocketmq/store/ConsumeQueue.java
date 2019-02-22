@@ -385,8 +385,8 @@ public class ConsumeQueue {
 
     public void putMessagePositionInfoWrapper(DispatchRequest request) {
         final int maxRetries = 30;
-        boolean canWrite = this.defaultMessageStore.getRunningFlags().isCQWriteable();
-        for (int i = 0; i < maxRetries && canWrite; i++) {
+        boolean canWrite = this.defaultMessageStore.getRunningFlags().isCQWriteable();//判断consumequeue是否可读性
+        for (int i = 0; i < maxRetries && canWrite; i++) {//最多重试30次
             long tagsCode = request.getTagsCode();
             if (isExtWriteEnable()) {
                 ConsumeQueueExt.CqExtUnit cqExtUnit = new ConsumeQueueExt.CqExtUnit();
@@ -402,6 +402,7 @@ public class ConsumeQueue {
                         topic, queueId, request.getCommitLogOffset());
                 }
             }
+            //将消息写入到 ConsumeQueue
             boolean result = this.putMessagePositionInfo(request.getCommitLogOffset(),
                 request.getMsgSize(), tagsCode, request.getConsumeQueueOffset());
             if (result) {
@@ -431,12 +432,12 @@ public class ConsumeQueue {
         if (offset <= this.maxPhysicOffset) {
             return true;
         }
-
+        //依次将消息偏移量、消息长度、tag hashCode写入到byteBuffer
         this.byteBufferIndex.flip();
-        this.byteBufferIndex.limit(CQ_STORE_UNIT_SIZE);
-        this.byteBufferIndex.putLong(offset);
-        this.byteBufferIndex.putInt(size);
-        this.byteBufferIndex.putLong(tagsCode);
+        this.byteBufferIndex.limit(CQ_STORE_UNIT_SIZE);//20=8+4+8
+        this.byteBufferIndex.putLong(offset);//8
+        this.byteBufferIndex.putInt(size);//4
+        this.byteBufferIndex.putLong(tagsCode);//8
 
         final long expectLogicOffset = cqOffset * CQ_STORE_UNIT_SIZE;
 

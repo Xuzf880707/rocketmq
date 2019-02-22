@@ -53,7 +53,7 @@ public class IndexService {
         this.storePath =
             StorePathConfigHelper.getStorePathIndex(store.getMessageStoreConfig().getStorePathRootDir());
     }
-
+    //lastExitOK：false表示异常退出
     public boolean load(final boolean lastExitOK) {
         File dir = new File(this.storePath);
         File[] files = dir.listFiles();
@@ -65,7 +65,8 @@ public class IndexService {
                     IndexFile f = new IndexFile(file.getPath(), this.hashSlotNum, this.indexNum, 0, 0);
                     f.load();
 
-                    if (!lastExitOK) {
+                    if (!lastExitOK) {//如果是异常退出
+                        //如果该文件的时间大于最大的刷盘时间，则将该文件销毁
                         if (f.getEndTimestamp() > this.defaultMessageStore.getStoreCheckpoint()
                             .getIndexMsgTimestamp()) {
                             f.destroy(0);
