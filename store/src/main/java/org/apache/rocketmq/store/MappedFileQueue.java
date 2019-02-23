@@ -337,6 +337,14 @@ public class MappedFileQueue {
         }
     }
 
+    /**
+     *
+     * @param expiredTime 配置的失效时间，超过这个时间，就可以被删除
+     * @param deleteFilesInterval 文件删除的时间间隔
+     * @param intervalForcibly 超过该时间间隔后，文件将被强制删除
+     * @param cleanImmediately 是否立即删除
+     * @return
+     */
     public int deleteExpiredFileByTime(final long expiredTime,
         final int deleteFilesInterval,
         final long intervalForcibly,
@@ -352,7 +360,9 @@ public class MappedFileQueue {
         if (null != mfs) {
             for (int i = 0; i < mfsLength; i++) {
                 MappedFile mappedFile = (MappedFile) mfs[i];
+                //获得文件的最大存活时间
                 long liveMaxTimestamp = mappedFile.getLastModifiedTimestamp() + expiredTime;
+                //如果当前时间超过最大存活时间，或者要求立刻删除，则删除文件
                 if (System.currentTimeMillis() >= liveMaxTimestamp || cleanImmediately) {
                     if (mappedFile.destroy(intervalForcibly)) {
                         files.add(mappedFile);
