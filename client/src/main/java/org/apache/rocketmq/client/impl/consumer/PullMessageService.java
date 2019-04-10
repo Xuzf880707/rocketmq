@@ -55,7 +55,7 @@ public class PullMessageService extends ServiceThread {
             log.warn("PullMessageServiceScheduledThread has shutdown");
         }
     }
-
+    //提供立即添加的方式，将pullRequest添加到队列中
     public void executePullRequestImmediately(final PullRequest pullRequest) {
         try {
             this.pullRequestQueue.put(pullRequest);
@@ -63,7 +63,7 @@ public class PullMessageService extends ServiceThread {
             log.error("executePullRequestImmediately pullRequestQueue.put", e);
         }
     }
-
+    //提供延迟添加模式，将pullRequest添加到队列pullRequest
     public void executeTaskLater(final Runnable r, final long timeDelay) {
         if (!isStopped()) {
             this.scheduledExecutorService.schedule(r, timeDelay, TimeUnit.MILLISECONDS);
@@ -77,11 +77,13 @@ public class PullMessageService extends ServiceThread {
     }
 
     private void pullMessage(final PullRequest pullRequest) {
+        //获得可消费的消息，根据消息所属消费组，选择一个消费者进行消费
         final MQConsumerInner consumer = this.mQClientFactory.selectConsumer(pullRequest.getConsumerGroup());
         if (consumer != null) {
+            //注意这里，这边pull到后，会强制转换为一个DefaultMQPushConsumerImpl
             DefaultMQPushConsumerImpl impl = (DefaultMQPushConsumerImpl) consumer;
-            impl.pullMessage(pullRequest);
-        } else {
+            impl.pullMessage(pullRequest);//消费者开始进行进行消费
+        } else {//如果没有对应的消费者，则丢弃这个请求
             log.warn("No matched consumer for the PullRequest {}, drop it", pullRequest);
         }
     }
@@ -92,6 +94,7 @@ public class PullMessageService extends ServiceThread {
 
         while (!this.isStopped()) {
             try {
+                //从队列中pullRequestQueue拉取消息，如果队列为空，则线程挂起
                 PullRequest pullRequest = this.pullRequestQueue.take();
                 this.pullMessage(pullRequest);
             } catch (InterruptedException ignored) {

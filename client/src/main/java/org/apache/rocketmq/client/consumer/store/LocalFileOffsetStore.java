@@ -57,7 +57,7 @@ public class LocalFileOffsetStore implements OffsetStore {
             this.groupName + File.separator +
             "offsets.json";
     }
-
+    //加载消费端本地的消费进度
     @Override
     public void load() throws MQClientException {
         OffsetSerializeWrapper offsetSerializeWrapper = this.readLocalOffset();
@@ -161,8 +161,7 @@ public class LocalFileOffsetStore implements OffsetStore {
     }
 
     @Override
-    public void updateConsumeOffsetToBroker(final MessageQueue mq, final long offset, final boolean isOneway)
-        throws RemotingException, MQBrokerException, InterruptedException, MQClientException {
+    public void updateConsumeOffsetToBroker(final MessageQueue mq, final long offset, final boolean isOneway) {
 
     }
 
