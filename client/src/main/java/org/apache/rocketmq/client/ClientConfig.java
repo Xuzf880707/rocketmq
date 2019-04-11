@@ -80,7 +80,7 @@ public class ClientConfig {
     public void setInstanceName(String instanceName) {
         this.instanceName = instanceName;
     }
-
+    //重命名实例的pid，保证同一个虚拟机环境下是唯一的
     public void changeInstanceNameToPID() {
         if (this.instanceName.equals("DEFAULT")) {
             this.instanceName = String.valueOf(UtilAll.getPid());

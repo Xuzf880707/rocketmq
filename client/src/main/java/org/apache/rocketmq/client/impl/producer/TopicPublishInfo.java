@@ -70,7 +70,8 @@ public class TopicPublishInfo {
     public void setHaveTopicRouterInfo(boolean haveTopicRouterInfo) {
         this.haveTopicRouterInfo = haveTopicRouterInfo;
     }
-    //lastBrokerName上一次选择的执行发送消息失败的Broker。第一次执行消息队列选择时，lastBrokerName为null
+    //lastBrokerName：上一次选择的执行发送消息失败的Broker。第一次执行消息队列选择时，lastBrokerName为null
+    //重试时候尽量避免连续两次的请求目标broker是同一个
     public MessageQueue selectOneMessageQueue(final String lastBrokerName) {
         if (lastBrokerName == null) {
             return selectOneMessageQueue();

@@ -50,7 +50,7 @@ public class MQClientManager {
     }
 
     /***
-     * MQClientInstance实例是根据以下信息创建：
+     * MQClientInstance实例是根据以下信息创建：（通常一个jvm环境下，不同的producter会公用同一个MQClientInstance）
      *      clientId:
      *        clientIp：客户端ip
      *        instanceName：根据rocketmq.client.name配置
@@ -61,9 +61,9 @@ public class MQClientManager {
      * @return
      */
     public MQClientInstance getAndCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
-        String clientId = clientConfig.buildMQClientId();
+        String clientId = clientConfig.buildMQClientId();//ip@自升id
         MQClientInstance instance = this.factoryTable.get(clientId);
-        if (null == instance) {//如果本地缓存不存在的话，新建一个
+        if (null == instance) {//如果本地缓存不存在的话，新建一个，所以这可以保证一个客户端ip只需要创建一个MQClientInstance即可
             instance =
                 new MQClientInstance(clientConfig.cloneClientConfig(),
                     this.factoryIndexGenerator.getAndIncrement(), clientId, rpcHook);

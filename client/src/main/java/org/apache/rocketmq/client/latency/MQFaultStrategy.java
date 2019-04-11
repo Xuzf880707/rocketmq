@@ -56,23 +56,43 @@ public class MQFaultStrategy {
         this.sendLatencyFaultEnable = sendLatencyFaultEnable;
     }
 
+    /***
+     *
+     * @param tpInfo 主题信息
+     * @param lastBrokerName 上一次轮询的broker
+     * @return
+     * 1、如果打开容错策略
+     *      a、通过RocketMQ的预测机制来预测一个Broker是否可用，如果是重试的话，判断如果上次失败的Broker可用那么还是会选择该Broker的队列
+     *      b、如果上次失败的broker就是不可用，则抛弃broker==lastBrokerName，则随机选择一个可用的broker进行发送
+     *      d、如果通过上面没有找到合适的broker,则舍弃broker==lastBrokerName，选择一个可用的broker来发送。
+     *          查询从规避的broker列表中选择一个可用的broker，如果没有找到，则返回null
+     * 2、如果没有打开容错策略
+     *      轮询队列进行发送，如果失败了，重试的时候过滤失败的Broker
+     */
     public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName) {
-        if (this.sendLatencyFaultEnable) {//如果开启故意延迟机制
+        if (this.sendLatencyFaultEnable) {//如果打开容错策略
             try {
-                int index = tpInfo.getSendWhichQueue().getAndIncrement();
+                ////获取一个可用的并且brokerName=lastBrokerName的消息队列
+                int index = tpInfo.getSendWhichQueue().getAndIncrement();//获得当前轮询值，并获得此次轮询到队列，是一个递增参数，每选择一次队列，值加1
                 for (int i = 0; i < tpInfo.getMessageQueueList().size(); i++) {
                     int pos = Math.abs(index++) % tpInfo.getMessageQueueList().size();
                     if (pos < 0)
                         pos = 0;
                     MessageQueue mq = tpInfo.getMessageQueueList().get(pos);
+                    //判断轮询的队列所属的broker是否可用，
+                    //判断broker是否已被加入faultItemTable？如果没有被加入，则表示该broker可用
+                    // 如果broker已被加入faultItemTable，则判断是否已超过指定的规避时间，如果超过了规避时间，则返回true，表示该broker重新恢复可用。
                     if (latencyFaultTolerance.isAvailable(mq.getBrokerName())) {//判断broker是否可用
+                        //如果是重试的话，则判断选中的可用的brokerName和上一次的brokerName是否同一个，不是的话继续遍历下一个broker。
+                        //如果不是重试的话，则直接返回选中的队列
                         if (null == lastBrokerName || mq.getBrokerName().equals(lastBrokerName))
                             return mq;
                     }
                 }
-                //尝试从规避的broker中选择一个可用的Broker，如果没有找到，则返回null
-                final String notBestBroker = latencyFaultTolerance.pickOneAtLeast();
-                int writeQueueNums = tpInfo.getQueueIdByBroker(notBestBroker);
+                //如果上面第一步中没有找到合适的队列，此时舍弃broker==lastBrokerName这个条件，选择一个相对较好的broker来发送
+                //尝试从规避的broker中选择一个可用的Broker，如果没有找到，则返回null.不考虑可用性的消息队列
+                final String notBestBroker = latencyFaultTolerance.pickOneAtLeast();//获得一个规避的可用的broker
+                int writeQueueNums = tpInfo.getQueueIdByBroker(notBestBroker);//从broker中查看写队列的个数
                 if (writeQueueNums > 0) {
                     final MessageQueue mq = tpInfo.selectOneMessageQueue();
                     if (notBestBroker != null) {
@@ -80,13 +100,13 @@ public class MQFaultStrategy {
                         mq.setQueueId(tpInfo.getSendWhichQueue().getAndIncrement() % writeQueueNums);
                     }
                     return mq;
-                } else {
+                } else {//从规避的broker列表中移除
                     latencyFaultTolerance.remove(notBestBroker);
                 }
             } catch (Exception e) {
                 log.error("Error occurred when selecting message queue", e);
             }
-
+            //在不开启容错的情况下，轮询队列进行发送，如果失败了，重试的时候过滤失败的Broker
             return tpInfo.selectOneMessageQueue();
         }
 

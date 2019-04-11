@@ -253,6 +253,7 @@ public class MQClientInstance {
                         this.mQClientAPIImpl.fetchNameServerAddr();
                     }
                     // Start request-response channel
+                    //启动跟broker服务端的网络通信
                     this.mQClientAPIImpl.start();
                     // Start various schedule tasks
                     this.startScheduledTask();
@@ -480,7 +481,8 @@ public class MQClientInstance {
 
     /***
      * 使用了重入锁
-     * 向broker发送心跳信息
+     *    1、向broker发送心跳信息
+     *    2、上传filter代码到
      */
     public void sendHeartbeatToAllBrokerWithLock() {
         if (this.lockHeartbeat.tryLock()) {
@@ -550,6 +552,7 @@ public class MQClientInstance {
      */
     private void sendHeartbeatToAllBroker() {
         final HeartbeatData heartbeatData = this.prepareHeartbeatData();
+        //检查绑定到MQClientInstance上的生产者和消费者是否为空
         final boolean producerEmpty = heartbeatData.getProducerDataSet().isEmpty();
         final boolean consumerEmpty = heartbeatData.getConsumerDataSet().isEmpty();
         if (producerEmpty && consumerEmpty) {//如果没有生产者和消费者绑定到该网络连接，则无需发送心跳信息
@@ -600,6 +603,7 @@ public class MQClientInstance {
     }
 
     private void uploadFilterClassSource() {
+        //获得网络连接绑定的消费者
         Iterator<Entry<String, MQConsumerInner>> it = this.consumerTable.entrySet().iterator();
         while (it.hasNext()) {
             Entry<String, MQConsumerInner> next = it.next();
@@ -731,7 +735,7 @@ public class MQClientInstance {
         // clientID
         heartbeatData.setClientID(this.clientId);
 
-        // Consumer
+        // 遍历所有的消费者Consumer
         for (Map.Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
             MQConsumerInner impl = entry.getValue();
             if (impl != null) {
@@ -747,7 +751,7 @@ public class MQClientInstance {
             }
         }
 
-        // Producer
+        // 遍历所有的生产者Producer
         for (Map.Entry<String/* group */, MQProducerInner> entry : this.producerTable.entrySet()) {
             MQProducerInner impl = entry.getValue();
             if (impl != null) {

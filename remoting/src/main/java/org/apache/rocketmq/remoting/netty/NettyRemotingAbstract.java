@@ -396,15 +396,29 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
+    /***
+     *
+     * @param channel 网络传输管道
+     * @param request
+     * @param timeoutMillis 超时时间
+     * @return
+     * @throws InterruptedException
+     * @throws RemotingSendRequestException
+     * @throws RemotingTimeoutException
+     */
     public RemotingCommand invokeSyncImpl(final Channel channel, final RemotingCommand request,
         final long timeoutMillis)
         throws InterruptedException, RemotingSendRequestException, RemotingTimeoutException {
         final int opaque = request.getOpaque();
 
         try {
+            //创建一个本次请求的响应的占位符
             final ResponseFuture responseFuture = new ResponseFuture(channel, opaque, timeoutMillis, null, null);
+            //把请求的响应的占位符放到一个hashtable里
             this.responseTable.put(opaque, responseFuture);
+            //获得远程地址
             final SocketAddress addr = channel.remoteAddress();
+            //写到服务端
             channel.writeAndFlush(request).addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture f) {
@@ -414,16 +428,16 @@ public abstract class NettyRemotingAbstract {
                     } else {
                         responseFuture.setSendRequestOK(false);
                     }
-
+                    //如果返回失败，则移除占位符，并设置异常信息
                     responseTable.remove(opaque);
                     responseFuture.setCause(f.cause());
                     responseFuture.putResponse(null);
                     log.warn("send a request command to channel <" + addr + "> failed.");
                 }
             });
-
+            //阻塞等待发送结果，等待会超时
             RemotingCommand responseCommand = responseFuture.waitResponse(timeoutMillis);
-            if (null == responseCommand) {
+            if (null == responseCommand) {//已经返回响应
                 if (responseFuture.isSendRequestOK()) {
                     throw new RemotingTimeoutException(RemotingHelper.parseSocketAddressAddr(addr), timeoutMillis,
                         responseFuture.getCause());

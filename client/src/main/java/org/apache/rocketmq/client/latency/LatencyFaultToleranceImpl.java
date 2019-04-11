@@ -47,7 +47,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
             old.setStartTimestamp(System.currentTimeMillis() + notAvailableDuration);
         }
     }
-
+    //如果faultItem 中不存在该broker，返回true，当存在时，还需判断isAvailable
     @Override
     public boolean isAvailable(final String name) {
         final FaultItem faultItem = this.faultItemTable.get(name);
@@ -62,24 +62,30 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         this.faultItemTable.remove(name);
     }
 
+    /***
+     * 1、遍历不可用的broker，
+     *
+     */
     @Override
     public String pickOneAtLeast() {
+        //遍历规避的broker集合
         final Enumeration<FaultItem> elements = this.faultItemTable.elements();
         List<FaultItem> tmpList = new LinkedList<FaultItem>();
         while (elements.hasMoreElements()) {
             final FaultItem faultItem = elements.nextElement();
             tmpList.add(faultItem);
         }
-
+        //如果存在规避的broker
         if (!tmpList.isEmpty()) {
+            // 先打乱再排序
             Collections.shuffle(tmpList);
 
             Collections.sort(tmpList);
 
             final int half = tmpList.size() / 2;
-            if (half <= 0) {
+            if (half <= 0) {// 只有一个元素的情况
                 return tmpList.get(0).getName();
-            } else {
+            } else {// 根据half取余
                 final int i = this.whichItemWorst.getAndIncrement() % half;
                 return tmpList.get(i).getName();
             }
@@ -130,7 +136,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
 
             return 0;
         }
-
+        //如果延迟时间已过也返回true
         public boolean isAvailable() {
             return (System.currentTimeMillis() - startTimestamp) >= 0;
         }
