@@ -105,6 +105,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     //创建一个存放异步发送请求的线程池队列
     private final BlockingQueue<Runnable> asyncSenderThreadPoolQueue;
     private final ExecutorService defaultAsyncSenderExecutor;
+    //异步发送消息是交给线程池来发送的，这个就是发送异步消息的线程池
     private ExecutorService asyncSenderExecutor;
 
     public DefaultMQProducerImpl(final DefaultMQProducer defaultMQProducer) {
@@ -546,6 +547,12 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         return this.mqFaultStrategy.selectOneMessageQueue(tpInfo, lastBrokerName);
     }
 
+    /***
+     *
+     * @param brokerName broker
+     * @param currentLatency 请求到响应的实际消耗时间
+     * @param isolation false
+     */
     public void updateFaultItem(final String brokerName, final long currentLatency, boolean isolation) {
         this.mqFaultStrategy.updateFaultItem(brokerName, currentLatency, isolation);
     }

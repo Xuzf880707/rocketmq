@@ -112,9 +112,14 @@ public class MQFaultStrategy {
 
         return tpInfo.selectOneMessageQueue(lastBrokerName);
     }
-
+    /***
+     *
+     * @param brokerName broker
+     * @param currentLatency 请求到响应的实际消耗时间
+     * @param isolation 发送成功：isolation=false，发送失败：isolation=true
+     */
     public void updateFaultItem(final String brokerName, final long currentLatency, boolean isolation) {
-        if (this.sendLatencyFaultEnable) {
+        if (this.sendLatencyFaultEnable) {//如果允许容错策略
             long duration = computeNotAvailableDuration(isolation ? 30000 : currentLatency);
             this.latencyFaultTolerance.updateFaultItem(brokerName, currentLatency, duration);
         }

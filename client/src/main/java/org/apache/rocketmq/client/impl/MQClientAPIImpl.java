@@ -397,7 +397,7 @@ public class MQClientAPIImpl {
         final Message msg,
         final long timeoutMillis,
         final RemotingCommand request,
-        final SendCallback sendCallback,
+        final SendCallback sendCallback,//异步发送的回调函数
         final TopicPublishInfo topicPublishInfo,
         final MQClientInstance instance,
         final int retryTimesWhenSendFailed,
@@ -409,12 +409,14 @@ public class MQClientAPIImpl {
             @Override
             public void operationComplete(ResponseFuture responseFuture) {
                 RemotingCommand response = responseFuture.getResponseCommand();
-                if (null == sendCallback && response != null) {
+                if (null == sendCallback && response != null) {//如果没有设置回调函数，且请求成功
 
                     try {
+                        //处理返回结果
                         SendResult sendResult = MQClientAPIImpl.this.processSendResponse(brokerName, msg, response);
                         if (context != null && sendResult != null) {
                             context.setSendResult(sendResult);
+                            //执行发送消息成功后的钩子钩子函数
                             context.getProducer().executeSendMessageHookAfter(context);
                         }
                     } catch (Throwable e) {
@@ -423,7 +425,7 @@ public class MQClientAPIImpl {
                     producer.updateFaultItem(brokerName, System.currentTimeMillis() - responseFuture.getBeginTimestamp(), false);
                     return;
                 }
-
+                //如果设置了回调函数，且请求成功
                 if (response != null) {
                     try {
                         SendResult sendResult = MQClientAPIImpl.this.processSendResponse(brokerName, msg, response);
@@ -434,6 +436,7 @@ public class MQClientAPIImpl {
                         }
 
                         try {
+                            //调用回调函数的成功返回
                             sendCallback.onSuccess(sendResult);
                         } catch (Throwable e) {
                         }
@@ -444,7 +447,7 @@ public class MQClientAPIImpl {
                         onExceptionImpl(brokerName, msg, 0L, request, sendCallback, topicPublishInfo, instance,
                             retryTimesWhenSendFailed, times, e, context, false, producer);
                     }
-                } else {
+                } else {//response == null请求失败
                     producer.updateFaultItem(brokerName, System.currentTimeMillis() - responseFuture.getBeginTimestamp(), true);
                     if (!responseFuture.isSendRequestOK()) {
                         MQClientException ex = new MQClientException("send request failed", responseFuture.getCause());

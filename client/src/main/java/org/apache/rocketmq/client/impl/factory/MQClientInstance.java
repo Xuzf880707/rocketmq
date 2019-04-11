@@ -239,6 +239,16 @@ public class MQClientInstance {
     /***
      * 启动生产者绑定的网络连接实例
      * @throws MQClientException
+     * 1、定时更新nameServer地址
+     * 2、创建跟broker端的网络通信
+     * 3、开启所有定时任务
+     *      a、定时更新nameServer
+     *      b、从nameServer上定时更新topicInfo
+     *      c、定时向broker发送心跳，清理离线的broker
+     *      d、定时持久化所有消费者当前消费的的Offset
+     *      e、校正线程池，保证每个消费者所持有用于发送消息的线程数维持在核心线程数
+     * 4、开始从队列中拉取消息
+     * 5、开启重新分配consumequeue的定时任务
      */
     public void start() throws MQClientException {
 

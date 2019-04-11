@@ -28,7 +28,11 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
     private final ConcurrentHashMap<String, FaultItem> faultItemTable = new ConcurrentHashMap<String, FaultItem>(16);
 
     private final ThreadLocalIndex whichItemWorst = new ThreadLocalIndex();
-
+    /***
+     *
+     * @param name broker
+     * @param currentLatency 请求到响应的实际消耗时间
+     */
     @Override
     public void updateFaultItem(final String name, final long currentLatency, final long notAvailableDuration) {
         FaultItem old = this.faultItemTable.get(name);

@@ -452,11 +452,23 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
+    /***
+     * 异步发送下靠西
+     * @param channel
+     * @param request
+     * @param timeoutMillis
+     * @param invokeCallback
+     * @throws InterruptedException
+     * @throws RemotingTooMuchRequestException
+     * @throws RemotingTimeoutException
+     * @throws RemotingSendRequestException
+     */
     public void invokeAsyncImpl(final Channel channel, final RemotingCommand request, final long timeoutMillis,
         final InvokeCallback invokeCallback)
         throws InterruptedException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
         long beginStartTime = System.currentTimeMillis();
-        final int opaque = request.getOpaque();
+        final int opaque = request.getOpaque();//获得请求队列
+        //通过信号量来控制并发
         boolean acquired = this.semaphoreAsync.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS);
         if (acquired) {
             final SemaphoreReleaseOnlyOnce once = new SemaphoreReleaseOnlyOnce(this.semaphoreAsync);
@@ -467,7 +479,7 @@ public abstract class NettyRemotingAbstract {
             }
 
             final ResponseFuture responseFuture = new ResponseFuture(channel, opaque, timeoutMillis - costTime, invokeCallback, once);
-            this.responseTable.put(opaque, responseFuture);
+            this.responseTable.put(opaque, responseFuture);//保存等待返回结果的table
             try {
                 channel.writeAndFlush(request).addListener(new ChannelFutureListener() {
                     @Override
