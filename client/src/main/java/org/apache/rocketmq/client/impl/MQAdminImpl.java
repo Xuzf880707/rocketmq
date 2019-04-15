@@ -76,10 +76,19 @@ public class MQAdminImpl {
         createTopic(key, newTopic, queueNum, 0);
     }
 
+    /***
+     * 创建主题
+     * @param key key 旧的主题
+     * @param newTopic 新的主题
+     * @param queueNum 新的主题的队列个数
+     * @param topicSysFlag
+     * @throws MQClientException
+     */
     public void createTopic(String key, String newTopic, int queueNum, int topicSysFlag) throws MQClientException {
         try {
+            //根据旧的的topic,从 nameserver上获得路由信息
             TopicRouteData topicRouteData = this.mQClientFactory.getMQClientAPIImpl().getTopicRouteInfoFromNameServer(key, timeoutMillis);
-            List<BrokerData> brokerDataList = topicRouteData.getBrokerDatas();
+            List<BrokerData> brokerDataList = topicRouteData.getBrokerDatas();//获得broker列表
             if (brokerDataList != null && !brokerDataList.isEmpty()) {
                 Collections.sort(brokerDataList);
 
@@ -89,7 +98,7 @@ public class MQAdminImpl {
                 StringBuilder orderTopicString = new StringBuilder();
 
                 for (BrokerData brokerData : brokerDataList) {
-                    String addr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);
+                    String addr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);//获得master的broker的地址
                     if (addr != null) {
                         TopicConfig topicConfig = new TopicConfig(newTopic);
                         topicConfig.setReadQueueNums(queueNum);
@@ -99,6 +108,7 @@ public class MQAdminImpl {
                         boolean createOK = false;
                         for (int i = 0; i < 5; i++) {
                             try {
+                                //更新创建新的topic
                                 this.mQClientFactory.getMQClientAPIImpl().createTopic(addr, key, topicConfig, timeoutMillis);
                                 createOK = true;
                                 createOKAtLeastOnce = true;
@@ -184,7 +194,12 @@ public class MQAdminImpl {
 
         throw new MQClientException("The broker[" + mq.getBrokerName() + "] not exist", null);
     }
-
+    /***
+     * 获得某个队列中最大的offset
+     * @param mq
+     * @return
+     * @throws MQClientException
+     */
     public long maxOffset(MessageQueue mq) throws MQClientException {
         String brokerAddr = this.mQClientFactory.findBrokerAddressInPublish(mq.getBrokerName());
         if (null == brokerAddr) {
@@ -202,7 +217,12 @@ public class MQAdminImpl {
 
         throw new MQClientException("The broker[" + mq.getBrokerName() + "] not exist", null);
     }
-
+    /***
+     * 获得某个队列中最小的offset
+     * @param mq
+     * @return
+     * @throws MQClientException
+     */
     public long minOffset(MessageQueue mq) throws MQClientException {
         String brokerAddr = this.mQClientFactory.findBrokerAddressInPublish(mq.getBrokerName());
         if (null == brokerAddr) {
@@ -220,7 +240,12 @@ public class MQAdminImpl {
 
         throw new MQClientException("The broker[" + mq.getBrokerName() + "] not exist", null);
     }
-
+    /***
+     * 获得某个队列中最早消息的存储时间
+     * @param mq
+     * @return
+     * @throws MQClientException
+     */
     public long earliestMsgStoreTime(MessageQueue mq) throws MQClientException {
         String brokerAddr = this.mQClientFactory.findBrokerAddressInPublish(mq.getBrokerName());
         if (null == brokerAddr) {
@@ -240,6 +265,15 @@ public class MQAdminImpl {
         throw new MQClientException("The broker[" + mq.getBrokerName() + "] not exist", null);
     }
 
+    /***
+     * 根据消息id查找消息
+     * @param msgId
+     * @return
+     * @throws RemotingException
+     * @throws MQBrokerException
+     * @throws InterruptedException
+     * @throws MQClientException
+     */
     public MessageExt viewMessage(
         String msgId) throws RemotingException, MQBrokerException, InterruptedException, MQClientException {
 
@@ -252,7 +286,17 @@ public class MQAdminImpl {
         return this.mQClientFactory.getMQClientAPIImpl().viewMessage(RemotingUtil.socketAddress2String(messageId.getAddress()),
             messageId.getOffset(), timeoutMillis);
     }
-
+    /***
+     *根据某个key查询最多maxNum个消息
+     * @param topic 主题
+     * @param key key
+     * @param maxNum 最大数量
+     * @param begin 开始
+     * @param end 结束
+     * @return
+     * @throws MQClientException
+     * @throws InterruptedException
+     */
     public QueryResult queryMessage(String topic, String key, int maxNum, long begin,
         long end) throws MQClientException,
         InterruptedException {
@@ -279,8 +323,9 @@ public class MQAdminImpl {
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);
             topicRouteData = this.mQClientFactory.getAnExistTopicRouteData(topic);
         }
-
+        //如果主题路由信息不为空
         if (topicRouteData != null) {
+            //根据主题信息获得broker路由信息（有延迟）
             List<String> brokerAddrs = new LinkedList<String>();
             for (BrokerData brokerData : topicRouteData.getBrokerDatas()) {
                 String addr = brokerData.selectBrokerAddr();
@@ -292,26 +337,28 @@ public class MQAdminImpl {
             if (!brokerAddrs.isEmpty()) {
                 final CountDownLatch countDownLatch = new CountDownLatch(brokerAddrs.size());
                 final List<QueryResult> queryResultList = new LinkedList<QueryResult>();
+                //定义一个非公平的读写锁
                 final ReadWriteLock lock = new ReentrantReadWriteLock(false);
 
                 for (String addr : brokerAddrs) {
-                    try {
+                    try {//查询信息请求头
                         QueryMessageRequestHeader requestHeader = new QueryMessageRequestHeader();
                         requestHeader.setTopic(topic);
                         requestHeader.setKey(key);
-                        requestHeader.setMaxNum(maxNum);
-                        requestHeader.setBeginTimestamp(begin);
-                        requestHeader.setEndTimestamp(end);
+                        requestHeader.setMaxNum(maxNum);//一次查询最大记录数
+                        requestHeader.setBeginTimestamp(begin);//开始
+                        requestHeader.setEndTimestamp(end);//结束
 
                         this.mQClientFactory.getMQClientAPIImpl().queryMessage(addr, requestHeader, timeoutMillis * 3,
                             new InvokeCallback() {
+                            //查询消息后回调
                                 @Override
                                 public void operationComplete(ResponseFuture responseFuture) {
                                     try {
                                         RemotingCommand response = responseFuture.getResponseCommand();
                                         if (response != null) {
                                             switch (response.getCode()) {
-                                                case ResponseCode.SUCCESS: {
+                                                case ResponseCode.SUCCESS: {//查询成功
                                                     QueryMessageResponseHeader responseHeader = null;
                                                     try {
                                                         responseHeader =
@@ -359,12 +406,12 @@ public class MQAdminImpl {
 
                 long indexLastUpdateTimestamp = 0;
                 List<MessageExt> messageList = new LinkedList<MessageExt>();
-                for (QueryResult qr : queryResultList) {
+                for (QueryResult qr : queryResultList) {//遍历从每个broker里查询到的结果
                     if (qr.getIndexLastUpdateTimestamp() > indexLastUpdateTimestamp) {
                         indexLastUpdateTimestamp = qr.getIndexLastUpdateTimestamp();
                     }
 
-                    for (MessageExt msgExt : qr.getMessageList()) {
+                    for (MessageExt msgExt : qr.getMessageList()) {//遍历查询结果
                         if (isUniqKey) {
                             if (msgExt.getMsgId().equals(key)) {
 
@@ -385,7 +432,7 @@ public class MQAdminImpl {
                             }
                         } else {
                             String keys = msgExt.getKeys();
-                            if (keys != null) {
+                            if (keys != null) {//检查key是否匹配
                                 boolean matched = false;
                                 String[] keyArray = keys.split(MessageConst.KEY_SEPARATOR);
                                 if (keyArray != null) {

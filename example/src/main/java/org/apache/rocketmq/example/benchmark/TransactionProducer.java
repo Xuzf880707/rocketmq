@@ -183,7 +183,7 @@ class TransactionCheckListenerBImpl implements TransactionCheckListener {
     @Override
     public LocalTransactionState checkLocalTransactionState(MessageExt msg) {
         statsBenchmarkTProducer.getCheckRequestSuccessCount().incrementAndGet();
-        if (ischeckffalse) {
+        if (ischeckffalse) {//如果检查失败，则回滚消息
 
             return LocalTransactionState.ROLLBACK_MESSAGE;
         }

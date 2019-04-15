@@ -59,6 +59,10 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
  * <strong>Thread Safety:</strong> After initialization, the instance can be regarded as thread-safe.
  * </p>
  */
+
+/***
+ * 默认的推模式的消费
+ */
 public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsumer {
 
     private final InternalLogger log = ClientLogger.getLog();
@@ -284,6 +288,12 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
      * @param rpcHook RPC hook to execute before each remoting command.
      * @param allocateMessageQueueStrategy Message queue allocating algorithm.
      */
+    /***
+     * 创建一个push消费者的实现
+     * @param consumerGroup
+     * @param rpcHook
+     * @param allocateMessageQueueStrategy
+     */
     public DefaultMQPushConsumer(final String consumerGroup, RPCHook rpcHook,
         AllocateMessageQueueStrategy allocateMessageQueueStrategy) {
         this.consumerGroup = consumerGroup;
@@ -353,6 +363,10 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
      * Constructor specifying consumer group.
      *
      * @param consumerGroup Consumer group.
+     */
+    /***
+     * 指定消费者组，默认采用每个队列进行平均的消费模式
+     * @param consumerGroup
      */
     public DefaultMQPushConsumer(final String consumerGroup) {
         this(consumerGroup, null, new AllocateMessageQueueAveragely());

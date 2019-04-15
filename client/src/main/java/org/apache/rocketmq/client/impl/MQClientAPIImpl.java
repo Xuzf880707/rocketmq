@@ -175,7 +175,7 @@ public class MQClientAPIImpl {
         topAddressing = new TopAddressing(MixAll.getWSAddr(), clientConfig.getUnitName());
         this.remotingClient = new NettyRemotingClient(nettyClientConfig, null);
         this.clientRemotingProcessor = clientRemotingProcessor;
-
+        //注册rpc请求的钩子函数
         this.remotingClient.registerRPCHook(rpcHook);
         this.remotingClient.registerProcessor(RequestCode.CHECK_TRANSACTION_STATE, this.clientRemotingProcessor, null);
 
