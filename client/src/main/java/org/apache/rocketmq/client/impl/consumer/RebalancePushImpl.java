@@ -197,7 +197,7 @@ public class RebalancePushImpl extends RebalanceImpl {
                         } catch (MQClientException e) {
                             result = -1;
                         }
-                    } else {//如果不是重试队列
+                    } else {//如果不是重试队列，则根据时间搜索时间对应的offset并开始消费
                         try {
                             long timestamp = UtilAll.parseDate(this.defaultMQPushConsumerImpl.getDefaultMQPushConsumer().getConsumeTimestamp(),
                                 UtilAll.YYYYMMDDHHMMSS).getTime();
