@@ -36,6 +36,14 @@ public class FilterAPI {
         return simple;
     }
 
+    /***
+     *
+     * @param consumerGroup 消费者组
+     * @param topic 主题
+     * @param subString 过滤tag,多个tag用||分割
+     * @return
+     * @throws Exception
+     */
     public static SubscriptionData buildSubscriptionData(final String consumerGroup, String topic,
         String subString) throws Exception {
         SubscriptionData subscriptionData = new SubscriptionData();
@@ -45,6 +53,7 @@ public class FilterAPI {
         if (null == subString || subString.equals(SubscriptionData.SUB_ALL) || subString.length() == 0) {
             subscriptionData.setSubString(SubscriptionData.SUB_ALL);
         } else {
+            //解析出多个tag
             String[] tags = subString.split("\\|\\|");
             if (tags.length > 0) {
                 for (String tag : tags) {

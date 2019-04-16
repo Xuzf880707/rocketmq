@@ -502,6 +502,16 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         log.info("resume this consumer, {}", this.defaultMQPushConsumer.getConsumerGroup());
     }
 
+    /***
+     * 将消费超时的消息返回给broker
+     * @param msg
+     * @param delayLevel
+     * @param brokerName
+     * @throws RemotingException
+     * @throws MQBrokerException
+     * @throws InterruptedException
+     * @throws MQClientException
+     */
     public void sendMessageBack(MessageExt msg, int delayLevel, final String brokerName)
         throws RemotingException, MQBrokerException, InterruptedException, MQClientException {
         try {
@@ -557,6 +567,12 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         }
     }
 
+    /***
+     *
+     * @throws MQClientException
+     * 1、维护主题和订阅信息
+     * 2、
+     */
     public synchronized void start() throws MQClientException {
         switch (this.serviceState) {
             case CREATE_JUST:
@@ -568,7 +584,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                 //获得消费者的订阅信息
                 this.copySubscription();
                 //如果是集群模式的话
-
+                //如果是集群模式的话  修改消费者的实例id
                 if (this.defaultMQPushConsumer.getMessageModel() == MessageModel.CLUSTERING) {
                     this.defaultMQPushConsumer.changeInstanceNameToPID();
                 }
@@ -587,6 +603,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                 this.pullAPIWrapper = new PullAPIWrapper(
                     mQClientFactory,
                     this.defaultMQPushConsumer.getConsumerGroup(), isUnitMode());
+                //这里可以注册多个过滤消息的hook
                 this.pullAPIWrapper.registerFilterMessageHook(filterMessageHookList);
 
                 if (this.defaultMQPushConsumer.getOffsetStore() != null) {//初始化消费进度
@@ -615,7 +632,10 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                     this.consumeMessageService =
                         new ConsumeMessageConcurrentlyService(this, (MessageListenerConcurrently) this.getMessageListenerInner());
                 }
-
+                /***
+                 * 开启定时清理过期消息的任务线程
+                 *      这里的清理是将消费超时的消息发送回broker,broker会保存到延迟队列中
+                 */
                 this.consumeMessageService.start();
 
                 boolean registerOK = mQClientFactory.registerConsumer(this.defaultMQPushConsumer.getConsumerGroup(), this);
@@ -826,6 +846,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         try {
             //获得订阅列表
             //key 主题名称  value: 订阅过滤的表达式
+            //sub初始是空的
             Map<String, String> sub = this.defaultMQPushConsumer.getSubscription();
             if (sub != null) {
                 for (final Map.Entry<String, String> entry : sub.entrySet()) {
@@ -842,7 +863,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             if (null == this.messageListenerInner) {
                 this.messageListenerInner = this.defaultMQPushConsumer.getMessageListener();
             }
-            //判断消息消费模式
+            //判断消息消费模式，如果是集群消费的话，会创建一个针对topic的重试队列
             switch (this.defaultMQPushConsumer.getMessageModel()) {
                 case BROADCASTING://广播
                     break;
@@ -879,12 +900,22 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         return this.rebalanceImpl.getSubscriptionInner();
     }
 
+    /***
+     *
+     * @param topic 主题
+     * @param subExpression 过滤tag
+     * @throws MQClientException
+     */
     public void subscribe(String topic, String subExpression) throws MQClientException {
         try {
+            /***
+             * 创建订阅对象
+             */
             SubscriptionData subscriptionData = FilterAPI.buildSubscriptionData(this.defaultMQPushConsumer.getConsumerGroup(),
                 topic, subExpression);
+            //重分配类里获取订阅信息类，存储主题和订阅信息的映射关系
             this.rebalanceImpl.getSubscriptionInner().put(topic, subscriptionData);
-            if (this.mQClientFactory != null) {
+            if (this.mQClientFactory != null) {//和broker保持心跳检测
                 this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
             }
         } catch (Exception e) {

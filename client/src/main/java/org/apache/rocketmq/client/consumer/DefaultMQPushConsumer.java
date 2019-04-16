@@ -603,7 +603,11 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
      * @throws MQClientException if there is any client error.
      */
     @Override
+    /***
+     * 启动消费者
+     */
     public void start() throws MQClientException {
+        //1、启动消费者
         this.defaultMQPushConsumerImpl.start();
         if (null != traceDispatcher) {
             try {
@@ -637,6 +641,10 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
      *
      * @param messageListener message handling callback.
      */
+    /**
+     * 注册并发消费的监听器
+     * @param messageListener
+     */
     @Override
     public void registerMessageListener(MessageListenerConcurrently messageListener) {
         this.messageListener = messageListener;
@@ -661,6 +669,15 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
      * @param subExpression subscription expression.it only support or operation such as "tag1 || tag2 || tag3" <br>
      * if null or * expression,meaning subscribe all
      * @throws MQClientException if there is any client error.
+     */
+    /***
+     * 订阅某个主题，并可指定过滤的tag
+     * @param topic 主题
+     * @param subExpression 消费端的过滤tag
+     * subscription expression.it only support or operation such as "tag1 || tag2 || tag3" <br> if
+     * null or * expression,meaning subscribe
+     * all
+     * @throws MQClientException
      */
     @Override
     public void subscribe(String topic, String subExpression) throws MQClientException {
