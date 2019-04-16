@@ -137,6 +137,11 @@ public class RebalancePushImpl extends RebalanceImpl {
         this.defaultMQPushConsumerImpl.getOffsetStore().removeOffset(mq);
     }
 
+    /***
+     * 根据consumeFromWhere来决定从哪里开始消费
+     * @param mq
+     * @return
+     */
     @Override
     public long computePullFromWhere(MessageQueue mq) {
         long result = -1;
@@ -146,16 +151,17 @@ public class RebalancePushImpl extends RebalanceImpl {
             case CONSUME_FROM_LAST_OFFSET_AND_FROM_MIN_WHEN_BOOT_FIRST:
             case CONSUME_FROM_MIN_OFFSET:
             case CONSUME_FROM_MAX_OFFSET:
-            case CONSUME_FROM_LAST_OFFSET: {
+            case CONSUME_FROM_LAST_OFFSET: {//如果从最后开始消费的话，
+                // 则从本地存储文件里查找当前MessageQueue最近消费的地址
                 long lastOffset = offsetStore.readOffset(mq, ReadOffsetType.READ_FROM_STORE);
-                if (lastOffset >= 0) {
+                if (lastOffset >= 0) {//如果本地持久化记录了最近消费的地址，则从next ofset继续消费
                     result = lastOffset;
                 }
                 // First start,no offset
-                else if (-1 == lastOffset) {
-                    if (mq.getTopic().startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
+                else if (-1 == lastOffset) {//如果第一次消费MessageQueue，
+                    if (mq.getTopic().startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {//如果是重试队列
                         result = 0L;
-                    } else {
+                    } else {//对于非重试队列，则从队列末尾开始消费
                         try {
                             result = this.mQClientFactory.getMQAdminImpl().maxOffset(mq);
                         } catch (MQClientException e) {
@@ -167,29 +173,31 @@ public class RebalancePushImpl extends RebalanceImpl {
                 }
                 break;
             }
-            case CONSUME_FROM_FIRST_OFFSET: {
+            case CONSUME_FROM_FIRST_OFFSET: {//如果从头开始消费
+                //从本地存储文件里查找当前MessageQueue最近消费的地址
                 long lastOffset = offsetStore.readOffset(mq, ReadOffsetType.READ_FROM_STORE);
-                if (lastOffset >= 0) {
+                if (lastOffset >= 0) {//如果本地持久化记录了最近消费的地址，则从next ofset继续消费
                     result = lastOffset;
-                } else if (-1 == lastOffset) {
+                } else if (-1 == lastOffset) {//如果本地持久化未记录了最近消费的地址，则从0开始消费
                     result = 0L;
                 } else {
                     result = -1;
                 }
                 break;
             }
-            case CONSUME_FROM_TIMESTAMP: {
+            case CONSUME_FROM_TIMESTAMP: {//如果是按时间来消费的话
+                //从本地存储文件里查找当前MessageQueue最近消费的地址
                 long lastOffset = offsetStore.readOffset(mq, ReadOffsetType.READ_FROM_STORE);
-                if (lastOffset >= 0) {
+                if (lastOffset >= 0) {//如果本地持久化记录了最近消费的地址，则从next ofset继续消费
                     result = lastOffset;
-                } else if (-1 == lastOffset) {
-                    if (mq.getTopic().startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
+                } else if (-1 == lastOffset) {//如果本地持久化未记录了最近消费的地址
+                    if (mq.getTopic().startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {//重试队列
                         try {
-                            result = this.mQClientFactory.getMQAdminImpl().maxOffset(mq);
+                            result = this.mQClientFactory.getMQAdminImpl().maxOffset(mq);//获得队列最大的offset
                         } catch (MQClientException e) {
                             result = -1;
                         }
-                    } else {
+                    } else {//如果不是重试队列
                         try {
                             long timestamp = UtilAll.parseDate(this.defaultMQPushConsumerImpl.getDefaultMQPushConsumer().getConsumeTimestamp(),
                                 UtilAll.YYYYMMDDHHMMSS).getTime();

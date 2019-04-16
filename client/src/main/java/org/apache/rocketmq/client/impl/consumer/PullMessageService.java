@@ -82,7 +82,7 @@ public class PullMessageService extends ServiceThread {
         if (consumer != null) {
             //注意这里，这边pull到后，会强制转换为一个DefaultMQPushConsumerImpl
             DefaultMQPushConsumerImpl impl = (DefaultMQPushConsumerImpl) consumer;
-            impl.pullMessage(pullRequest);//消费者开始进行进行消费
+            impl.pullMessage(pullRequest);//消费者开始进行消费
         } else {//如果没有对应的消费者，则丢弃这个请求
             log.warn("No matched consumer for the PullRequest {}, drop it", pullRequest);
         }
@@ -91,7 +91,7 @@ public class PullMessageService extends ServiceThread {
     @Override
     public void run() {
         log.info(this.getServiceName() + " service started");
-
+        //一个死循环拉取消息
         while (!this.isStopped()) {
             try {
                 //从队列中pullRequestQueue拉取消息，如果队列为空，则线程挂起

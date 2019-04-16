@@ -249,6 +249,8 @@ public class MQClientInstance {
      *      e、校正线程池，保证每个消费者所持有用于发送消息的线程数维持在核心线程数
      * 4、开始从队列中拉取消息
      * 5、开启重新分配consumequeue的定时任务
+     * 6、不断的从pullRequestQueue消费broker端推过来的消息
+     * 7、定时检查队列和消费者的变化情况，及时重新分配队列，保证消费者的负载均衡
      */
     public void start() throws MQClientException {
 
@@ -267,9 +269,9 @@ public class MQClientInstance {
                     this.mQClientAPIImpl.start();
                     // Start various schedule tasks
                     this.startScheduledTask();
-                    // Start pull service
+                    // 不断的从pullRequestQueue消费broker端推过来的消息
                     this.pullMessageService.start();
-                    // Start rebalance service
+                    // 定时检查队列和消费者的变化情况，及时重新分配队列，保证消费者的负载均衡
                     this.rebalanceService.start();
                     // Start push service
                     this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
@@ -289,7 +291,11 @@ public class MQClientInstance {
     }
 
     /***
-     * 开启所有定时任务
+     * 开启所有定时任务：
+     *      1、定时更新最新的nameServer信息，并更新到本地缓存中，每2分钟同步一次
+     *      2、定时从nameServer获取该jvm实例里所有的topic的路由信息，并更新到本地内存里
+     *      3、定时清理本地中的缓存的离线的broker，并跟broker保持心跳检测
+     *      4、持久化所有的消费者的offset
      */
     private void startScheduledTask() {
         //1、定时的更新 nameSrvAddr 集群地址
@@ -327,7 +333,7 @@ public class MQClientInstance {
             @Override
             public void run() {
                 try {
-                    MQClientInstance.this.cleanOfflineBroker();
+                    MQClientInstance.this.cleanOfflineBroker();//
                     MQClientInstance.this.sendHeartbeatToAllBrokerWithLock();
                 } catch (Exception e) {
                     log.error("ScheduledTask sendHeartbeatToAllBroker exception", e);

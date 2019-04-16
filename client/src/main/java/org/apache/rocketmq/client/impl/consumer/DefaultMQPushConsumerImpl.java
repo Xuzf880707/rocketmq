@@ -207,7 +207,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             log.info("the pull request[{}] is dropped.", pullRequest.toString());
             return;
         }
-        //更新处理对立里最新的拉取时间
+        //更新处理队列里最新的拉取时间
         pullRequest.getProcessQueue().setLastPullTimestamp(System.currentTimeMillis());
 
         try {
@@ -250,7 +250,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         }
         //如果不是顺序消费
         if (!this.consumeOrderly) {
-            //判断processQueue 最大偏移量和最小偏移量之间的差距
+            //判断processQueue 最大偏移量和最小偏移量之间的差距，则要限流
             if (processQueue.getMaxSpan() > this.defaultMQPushConsumer.getConsumeConcurrentlyMaxSpan()) {
                 this.executePullRequestLater(pullRequest, PULL_TIME_DELAY_MILLS_WHEN_FLOW_CONTROL);
                 if ((queueMaxSpanFlowControlTimes++ % 1000) == 0) {
@@ -1048,11 +1048,15 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         }
     }
 
+    /***
+     * 持久化消费者负责的所有的MessageQueue中已消费的offset
+     */
     @Override
     public void persistConsumerOffset() {
         try {
             this.makeSureStateOK();
             Set<MessageQueue> mqs = new HashSet<MessageQueue>();
+            //获得rebalanceImpl管理的所有messageQueue
             Set<MessageQueue> allocateMq = this.rebalanceImpl.getProcessQueueTable().keySet();
             mqs.addAll(allocateMq);
 

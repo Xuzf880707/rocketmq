@@ -215,7 +215,11 @@ public abstract class RebalanceImpl {
             }
         }
     }
-
+    /**
+       * 执行分配消息队列
+       *
+       * @param isOrder 是否顺序消息
+       */
     public void doRebalance(final boolean isOrder) {
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
         if (subTable != null) {
@@ -230,7 +234,7 @@ public abstract class RebalanceImpl {
                 }
             }
         }
-
+        // 移除未订阅的topic对应的消息队列
         this.truncateMessageQueueNotMyTopic();
     }
 
@@ -238,6 +242,11 @@ public abstract class RebalanceImpl {
         return subscriptionInner;
     }
 
+    /**
+     * 对主题重新分配队列
+     * @param topic
+     * @param isOrder
+     */
     private void rebalanceByTopic(final String topic, final boolean isOrder) {
         switch (messageModel) {
             case BROADCASTING: {
@@ -257,6 +266,7 @@ public abstract class RebalanceImpl {
                 }
                 break;
             }
+            //获取 Topic 对应的消息队列和消费者们，并对其进行排序。因为各 Consumer 是在本地分配消息队列，排序后才能保证各 Consumer 顺序一致。
             case CLUSTERING: {
                 Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
                 List<String> cidAll = this.mQClientFactory.findConsumerIdList(topic, consumerGroup);
@@ -296,7 +306,7 @@ public abstract class RebalanceImpl {
                     if (allocateResult != null) {
                         allocateResultSet.addAll(allocateResult);
                     }
-
+                    //当分配队列时，更新 Topic 对应的消息队列，并返回是否有变
                     boolean changed = this.updateProcessQueueTableInRebalance(topic, allocateResultSet, isOrder);
                     if (changed) {
                         log.info(

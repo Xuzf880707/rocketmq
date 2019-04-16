@@ -111,6 +111,10 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
         return -1;
     }
 
+    /***
+     *
+     * @param mqs
+     */
     @Override
     public void persistAll(Set<MessageQueue> mqs) {
         if (null == mqs || mqs.isEmpty())
@@ -118,12 +122,13 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
 
         final HashSet<MessageQueue> unusedMQ = new HashSet<MessageQueue>();
         if (!mqs.isEmpty()) {
+            //遍历本地缓存offsetTable,是一个ConcurrentHashMap<MessageQueue, AtomicLong>
             for (Map.Entry<MessageQueue, AtomicLong> entry : this.offsetTable.entrySet()) {
-                MessageQueue mq = entry.getKey();
-                AtomicLong offset = entry.getValue();
+                MessageQueue mq = entry.getKey();//遍历当前消费者负责的MessageQueue
+                AtomicLong offset = entry.getValue();//获取当前MessageQueue已消费的offset
                 if (offset != null) {
                     if (mqs.contains(mq)) {
-                        try {
+                        try {//通知broker，MessageQueue已被消费的offset更新到broker上
                             this.updateConsumeOffsetToBroker(mq, offset.get());
                             log.info("[persistAll] Group: {} ClientId: {} updateConsumeOffsetToBroker {} {}",
                                 this.groupName,
@@ -133,7 +138,7 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
                         } catch (Exception e) {
                             log.error("updateConsumeOffsetToBroker exception, " + mq.toString(), e);
                         }
-                    } else {
+                    } else {//如果本地offsetTable没有维护的 messageQueue，说明该messageQueue可能已经被损坏，则要移除
                         unusedMQ.add(mq);
                     }
                 }
