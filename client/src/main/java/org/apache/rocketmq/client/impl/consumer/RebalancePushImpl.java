@@ -151,8 +151,13 @@ public class RebalancePushImpl extends RebalanceImpl {
             case CONSUME_FROM_LAST_OFFSET_AND_FROM_MIN_WHEN_BOOT_FIRST:
             case CONSUME_FROM_MIN_OFFSET:
             case CONSUME_FROM_MAX_OFFSET:
-            case CONSUME_FROM_LAST_OFFSET: {//如果从最后开始消费的话，
-                // 则从本地存储文件里查找当前MessageQueue最近消费的地址
+            case CONSUME_FROM_LAST_OFFSET: {
+                //如果指定了从最后开始消费的话，
+                // 1、从本地存储文件里查找当前MessageQueue最近消费的offset
+                //      如果offset>0，表示这个队列之前被消费过，则接着原来的offset继续消费
+                //      如果offset=-1，表示之前未有对该messagequeue有过消费记录，则需要判断该队列是属于重复消费的主题呢，还是普通主题
+                //          重试主题的队列：则从0开始消费
+                //          普通队列，则从broker端获取最近的offset，并继续消费
                 long lastOffset = offsetStore.readOffset(mq, ReadOffsetType.READ_FROM_STORE);
                 if (lastOffset >= 0) {//如果本地持久化记录了最近消费的地址，则从next ofset继续消费
                     result = lastOffset;
@@ -173,6 +178,11 @@ public class RebalancePushImpl extends RebalanceImpl {
                 }
                 break;
             }
+            //如果指定了从队列头开始消费的话，
+            // 1、从本地存储文件里查找当前MessageQueue最近消费的offset
+            //      如果offset>0，表示这个队列之前被消费过，则接着原来的offset继续消费
+            //      如果offset=-1，表示之前未有对该messagequeue有过消费记录，则从该队列头开始消费
+
             case CONSUME_FROM_FIRST_OFFSET: {//如果从头开始消费
                 //从本地存储文件里查找当前MessageQueue最近消费的地址
                 long lastOffset = offsetStore.readOffset(mq, ReadOffsetType.READ_FROM_STORE);
@@ -185,7 +195,13 @@ public class RebalancePushImpl extends RebalanceImpl {
                 }
                 break;
             }
-            case CONSUME_FROM_TIMESTAMP: {//如果是按时间来消费的话
+            //如果是按时间来消费的话
+            // 1、从本地存储文件里查找当前MessageQueue最近消费的offset
+            //      如果offset>0，表示这个队列之前被消费过，则接着原来的offset继续消费
+            //      如果offset=-1，表示之前未有对该messagequeue有过消费记录，则需要判断该队列是属于重复消费的主题呢，还是普通主题
+            //          重试主题的队列：则从0开始消费
+            //          普通队列，根据时间戳从broker端获取相应的offset并继续消费
+            case CONSUME_FROM_TIMESTAMP: {
                 //从本地存储文件里查找当前MessageQueue最近消费的地址
                 long lastOffset = offsetStore.readOffset(mq, ReadOffsetType.READ_FROM_STORE);
                 if (lastOffset >= 0) {//如果本地持久化记录了最近消费的地址，则从next ofset继续消费
