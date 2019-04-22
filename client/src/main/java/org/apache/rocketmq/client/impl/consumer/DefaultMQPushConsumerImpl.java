@@ -627,11 +627,11 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                 //这里可以注册多个过滤消息的hook
                 this.pullAPIWrapper.registerFilterMessageHook(filterMessageHookList);
 
-                if (this.defaultMQPushConsumer.getOffsetStore() != null) {//初始化消费进度
+                if (this.defaultMQPushConsumer.getOffsetStore() != null) {//初始化消费进度，这里说明可以自定义创建一个文件维护消费offset的实现类
                     this.offsetStore = this.defaultMQPushConsumer.getOffsetStore();
-                } else {
+                } else {//默认执行到这里
                     switch (this.defaultMQPushConsumer.getMessageModel()) {
-                        case BROADCASTING://如果是广播模式，则消费进度保存在消费端
+                        case BROADCASTING://如果是广播模式，则消费进度保存在消费端本地文件上
                             this.offsetStore = new LocalFileOffsetStore(this.mQClientFactory, this.defaultMQPushConsumer.getConsumerGroup());
                             break;
                         case CLUSTERING://如果是集群的话，则消费进度保存在broker端上
@@ -644,11 +644,12 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                 }
                 this.offsetStore.load();
                 //创建消费端消费线程
+                //如果是顺序消费：则consumeOrderly，并采用ConsumeMessageOrderlyService实现类
                 if (this.getMessageListenerInner() instanceof MessageListenerOrderly) {//如果是顺序消费
                     this.consumeOrderly = true;
                     this.consumeMessageService =
                         new ConsumeMessageOrderlyService(this, (MessageListenerOrderly) this.getMessageListenerInner());
-                } else if (this.getMessageListenerInner() instanceof MessageListenerConcurrently) {
+                } else if (this.getMessageListenerInner() instanceof MessageListenerConcurrently) {//如果是并发消费
                     this.consumeOrderly = false;
                     this.consumeMessageService =
                         new ConsumeMessageConcurrentlyService(this, (MessageListenerConcurrently) this.getMessageListenerInner());

@@ -307,16 +307,16 @@ public class MQClientAPIImpl {
 
     /***
      * 开始发送消息
-     * @param addr
-     * @param brokerName
-     * @param msg
-     * @param requestHeader
-     * @param timeoutMillis
-     * @param communicationMode
-     * @param sendCallback
-     * @param topicPublishInfo
-     * @param instance
-     * @param retryTimesWhenSendFailed
+     * @param addr 发送地址
+     * @param brokerName broker名称
+     * @param msg 消息
+     * @param requestHeader 请求头
+     * @param timeoutMillis 超时时间
+     * @param communicationMode 发送模式
+     * @param sendCallback 回调函数
+     * @param topicPublishInfo 主题信息
+     * @param instance 网络请求实例
+     * @param retryTimesWhenSendFailed 失败重试次数
      * @param context
      * @param producer
      * @return
@@ -408,6 +408,7 @@ public class MQClientAPIImpl {
         this.remotingClient.invokeAsync(addr, request, timeoutMillis, new InvokeCallback() {
             @Override
             public void operationComplete(ResponseFuture responseFuture) {
+                //如果发送成功后，会回调这个回调函数，判断发送结果和回调函数，
                 RemotingCommand response = responseFuture.getResponseCommand();
                 if (null == sendCallback && response != null) {//如果没有设置回调函数，且请求成功
 
@@ -531,9 +532,9 @@ public class MQClientAPIImpl {
         final RemotingCommand response
     ) throws MQBrokerException, RemotingCommandException {
         switch (response.getCode()) {
-            case ResponseCode.FLUSH_DISK_TIMEOUT:
-            case ResponseCode.FLUSH_SLAVE_TIMEOUT:
-            case ResponseCode.SLAVE_NOT_AVAILABLE: {
+            case ResponseCode.FLUSH_DISK_TIMEOUT://磁盘冲刷超时
+            case ResponseCode.FLUSH_SLAVE_TIMEOUT://异步复制超时
+            case ResponseCode.SLAVE_NOT_AVAILABLE: {//slave不可用
             }
             case ResponseCode.SUCCESS: {
                 SendStatus sendStatus = SendStatus.SEND_OK;
@@ -554,20 +555,21 @@ public class MQClientAPIImpl {
                         assert false;
                         break;
                 }
-
+                //封装解码返回响应头
                 SendMessageResponseHeader responseHeader =
                     (SendMessageResponseHeader) response.decodeCommandCustomHeader(SendMessageResponseHeader.class);
 
                 MessageQueue messageQueue = new MessageQueue(msg.getTopic(), brokerName, responseHeader.getQueueId());
 
                 String uniqMsgId = MessageClientIDSetter.getUniqID(msg);
-                if (msg instanceof MessageBatch) {
+                if (msg instanceof MessageBatch) {//如果是批量发送的话
                     StringBuilder sb = new StringBuilder();
                     for (Message message : (MessageBatch) msg) {
                         sb.append(sb.length() == 0 ? "" : ",").append(MessageClientIDSetter.getUniqID(message));
                     }
                     uniqMsgId = sb.toString();
                 }
+                //封装返回结果
                 SendResult sendResult = new SendResult(sendStatus,
                     uniqMsgId,
                     responseHeader.getMsgId(), messageQueue, responseHeader.getQueueOffset());

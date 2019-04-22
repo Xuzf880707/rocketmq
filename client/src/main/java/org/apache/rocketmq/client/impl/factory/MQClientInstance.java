@@ -85,6 +85,8 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 /***
  * MQClientInstance封装了RocketMQ网络处理API
  * 是生产者、消费者和NameServer、Broker打交道的网络通道
+ *
+ * 一个jvm实例对应一个MQClientInstance
  */
 public class MQClientInstance {
     private final static long LOCK_TIMEOUT_MILLIS = 3000;
@@ -114,6 +116,7 @@ public class MQClientInstance {
             return new Thread(r, "MQClientFactoryScheduledThread");
         }
     });
+    //用来处理原好吃呢个
     private final ClientRemotingProcessor clientRemotingProcessor;
     private final PullMessageService pullMessageService;
     private final RebalanceService rebalanceService;
@@ -145,9 +148,9 @@ public class MQClientInstance {
         this.clientId = clientId;
 
         this.mQAdminImpl = new MQAdminImpl(this);
-
+        //consume用来拉取broker推送过来的消息
         this.pullMessageService = new PullMessageService(this);
-
+        //consume负载均衡
         this.rebalanceService = new RebalanceService(this);
 
         this.defaultMQProducer = new DefaultMQProducer(MixAll.CLIENT_INNER_PRODUCER_GROUP);

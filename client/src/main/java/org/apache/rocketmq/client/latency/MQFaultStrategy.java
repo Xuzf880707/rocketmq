@@ -63,6 +63,7 @@ public class MQFaultStrategy {
      * @return
      * 1、如果打开容错策略
      *      a、通过RocketMQ的预测机制来预测一个Broker是否可用，如果是重试的话，判断如果上次失败的Broker可用那么还是会选择该Broker的队列
+     *          优先选择上次失败的brokerName，可以保证broker之间的负载均衡
      *      b、如果上次失败的broker就是不可用，则抛弃broker==lastBrokerName，则随机选择一个可用的broker进行发送
      *      d、如果通过上面没有找到合适的broker,则舍弃broker==lastBrokerName，选择一个可用的broker来发送。
      *          查询从规避的broker列表中选择一个可用的broker，如果没有找到，则返回null

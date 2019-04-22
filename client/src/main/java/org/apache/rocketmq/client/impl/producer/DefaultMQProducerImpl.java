@@ -681,23 +681,26 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         long endTimestamp = beginTimestampFirst;
         //获得topic路由信息，第一次本地缓存topic的路由信息，查询NameServer查询获取，如果没有则会先创建再查询
         TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
-        if (topicPublishInfo != null && topicPublishInfo.ok()) {
+        if (topicPublishInfo != null && topicPublishInfo.ok()) {//检查主题状态是否正常
             boolean callTimeout = false;
             MessageQueue mq = null;
             Exception exception = null;
             SendResult sendResult = null;
-            //获得配置的重试次数
+            //获得配置的重试次数：
+            //同步：1+配置次数
+            //异步或oneway:1
             int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
             int times = 0;
             String[] brokersSent = new String[timesTotal];
             for (; times < timesTotal; times++) {
                 String lastBrokerName = null == mq ? null : mq.getBrokerName();//重试话，记录上次发送失败的broker
-                //选中新的目标队列
+                //根据上一次失败的 broker随机选中新的目标队列
                 MessageQueue mqSelected = this.selectOneMessageQueue(topicPublishInfo, lastBrokerName);
-                if (mqSelected != null) {
+                if (mqSelected != null) {//选择一个目标队列
                     mq = mqSelected;
                     brokersSent[times] = mq.getBrokerName();//绑定重试次数和broker的映射挂你下
                     try {
+                        //记录开始时间
                         beginTimestampPrev = System.currentTimeMillis();
                         //记录选择队列的时间，避免超时
                         long costTime = beginTimestampPrev - beginTimestampFirst;
@@ -714,7 +717,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                                 return null;
                             case ONEWAY:
                                 return null;
-                            case SYNC:
+                            case SYNC://从这里可以看到，对于同步发送，如果返回的结果里的sendStatus！=OK的话，也会继续重试，如果是异步发送或者oneway发送，则将结果直接返回
                                 if (sendResult.getSendStatus() != SendStatus.SEND_OK) {
                                     if (this.defaultMQProducer.isRetryAnotherBrokerWhenNotStoreOK()) {
                                         continue;
@@ -727,6 +730,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         }
                     } catch (RemotingException e) {
                         endTimestamp = System.currentTimeMillis();
+                        //维护发送错误的brokerName到faultItemTable
                         this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true);
                         log.warn(String.format("sendKernelImpl exception, resend at once, InvokeID: %s, RT: %sms, Broker: %s", invokeID, endTimestamp - beginTimestampPrev, mq), e);
                         log.warn(msg.toString());
@@ -1001,6 +1005,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         break;
                 }
                 //检查是否绑定了发送的钩子函数，如果有，则执行after方法
+                //所以，可以通过注册 producer.SendMessageHook，在消息发送完成后，调用该SendMessageHook.sendMessageAfter
                 if (this.hasSendMessageHook()) {
                     context.setSendResult(sendResult);
                     this.executeSendMessageHookAfter(context);
@@ -1008,6 +1013,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
                 return sendResult;
             } catch (RemotingException e) {
+                //检查是否绑定了发送的钩子函数，如果有，则执行after方法
+                //所以，可以通过注册 producer.SendMessageHook，在消息发送失败后，调用该SendMessageHook.sendMessageAfter，通过异常做一些额外处理
                 if (this.hasSendMessageHook()) {
                     context.setException(e);
                     this.executeSendMessageHookAfter(context);
@@ -1194,6 +1201,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         final long beginStartTime = System.currentTimeMillis();
         ExecutorService executor = this.getAsyncSenderExecutor();
         try {
+            //异步消息发送后，会交给线程池来处理
             executor.submit(new Runnable() {
                 @Override
                 public void run() {
@@ -1205,14 +1213,14 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                             throw new MQClientException("message's topic not equal mq's topic", null);
                         }
                         long costTime = System.currentTimeMillis() - beginStartTime;
-                        if (timeout > costTime) {
+                        if (timeout > costTime) {//如果还没超时，则异步发送消息
                             try {
                                 sendKernelImpl(msg, mq, CommunicationMode.ASYNC, sendCallback, null,
                                     timeout - costTime);
                             } catch (MQBrokerException e) {
                                 throw new MQClientException("unknown exception", e);
                             }
-                        } else {
+                        } else {//发送失败的话，回调sendCallback.onException
                             sendCallback.onException(new RemotingTooMuchRequestException("call timeout"));
                         }
                     } catch (Exception e) {
