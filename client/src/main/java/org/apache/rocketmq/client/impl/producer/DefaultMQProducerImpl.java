@@ -691,7 +691,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             //异步或oneway:1
             int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
             int times = 0;
-            String[] brokersSent = new String[timesTotal];
+            String[] brokersSent = new String[timesTotal];//如果有重试的话，该数组用来记录前几次选择的messageQueue所属的broker
             for (; times < timesTotal; times++) {
                 String lastBrokerName = null == mq ? null : mq.getBrokerName();//重试话，记录上次发送失败的broker
                 //根据上一次失败的 broker随机选中新的目标队列
@@ -882,19 +882,19 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 if (!(msg instanceof MessageBatch)) {//如果不是批量发送的话，则为消息设置全局唯一的id
                     MessageClientIDSetter.setUniqID(msg);
                 }
-
+                //默认消息状态是0
                 int sysFlag = 0;
                 boolean msgBodyCompressed = false;
                 if (this.tryToCompressMessage(msg)) {//如果消息体超过默认的4k的话，则会采用zip压缩
-                    sysFlag |= MessageSysFlag.COMPRESSED_FLAG;
+                    sysFlag |= MessageSysFlag.COMPRESSED_FLAG;//sysFlag=1
                     msgBodyCompressed = true;
                 }
 
                 final String tranMsg = msg.getProperty(MessageConst.PROPERTY_TRANSACTION_PREPARED);
                 if (tranMsg != null && Boolean.parseBoolean(tranMsg)) {//如果是事务prepared消息，则设置事务标记
-                    sysFlag |= MessageSysFlag.TRANSACTION_PREPARED_TYPE;
+                    sysFlag |= MessageSysFlag.TRANSACTION_PREPARED_TYPE;//4
                 }
-
+                //通过这里可以看到，我们可以设置一些禁止操作的控制
                 if (hasCheckForbiddenHook()) {
                     CheckForbiddenContext checkForbiddenContext = new CheckForbiddenContext();
                     checkForbiddenContext.setNameSrvAddr(this.defaultMQProducer.getNamesrvAddr());
@@ -920,7 +920,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     if (isTrans != null && isTrans.equals("true")) {
                         context.setMsgType(MessageType.Trans_Msg_Half);
                     }
-
+                    //从这里我们可以发现，可以将消息设置为延迟发送
                     if (msg.getProperty("__STARTDELIVERTIME") != null || msg.getProperty(MessageConst.PROPERTY_DELAY_TIME_LEVEL) != null) {
                         context.setMsgType(MessageType.Delay_Msg);
                     }
@@ -940,7 +940,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 requestHeader.setReconsumeTimes(0);//消息重复消费次数
                 requestHeader.setUnitMode(this.isUnitMode());//是否是批量消息
                 requestHeader.setBatch(msg instanceof MessageBatch);
-                if (requestHeader.getTopic().startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {//判断是否是发发向重复发送队列
+                if (requestHeader.getTopic().startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {//判断是否是发向重试队列
                     String reconsumeTimes = MessageAccessor.getReconsumeTime(msg);//获得重复的次数
                     if (reconsumeTimes != null) {
                         requestHeader.setReconsumeTimes(Integer.valueOf(reconsumeTimes));
@@ -1397,8 +1397,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
     /***
      * 发送事务消息
-     * @param msg
-     * @param localTransactionExecuter
+     * @param msg  消息
+     * @param localTransactionExecuter 本地事务操作
      * @param arg
      * @return
      * @throws MQClientException
@@ -1406,10 +1406,12 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     public TransactionSendResult sendMessageInTransaction(final Message msg,
                                                           final LocalTransactionExecuter localTransactionExecuter, final Object arg)
         throws MQClientException {
+        //broker 会根据该监听器回查处于prepared状态的消息
         TransactionListener transactionListener = getCheckListener();
         if (null == localTransactionExecuter && null == transactionListener) {
             throw new MQClientException("tranExecutor is null", null);
         }
+        //消息相关信息校验：消息topic 消息大小 消息长度等校验
         Validators.checkMessage(msg, this.defaultMQProducer);
 
         SendResult sendResult = null;
@@ -1435,13 +1437,14 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     if (null != transactionId && !"".equals(transactionId)) {
                         msg.setTransactionId(transactionId);
                     }
+                    //prepared消息成功发送到broker后，会回调本地事务，并会的本地回调事务的状态
                     if (null != localTransactionExecuter) {
                         localTransactionState = localTransactionExecuter.executeLocalTransactionBranch(msg, arg);
-                    } else if (transactionListener != null) {
+                    } else if (transactionListener != null) {//如果localTransactionExecuter等于空，但是监听器不等于空，则调用transactionListener，并返回状态
                         log.debug("Used new transaction API");
                         localTransactionState = transactionListener.executeLocalTransaction(msg, arg);
                     }
-                    if (null == localTransactionState) {
+                    if (null == localTransactionState) {//如果本地事务未返回状态，则表示未知
                         localTransactionState = LocalTransactionState.UNKNOW;
                     }
 
@@ -1464,7 +1467,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             default:
                 break;
         }
-
+        //获得本地事务返回的状态，并发送给broker
         try {
             this.endTransaction(sendResult, localTransactionState, localException);
         } catch (Exception e) {
@@ -1489,7 +1492,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         Message msg) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         return send(msg, this.defaultMQProducer.getSendMsgTimeout());
     }
-
+    //根据本地事务的执行状态，向broker提交事务确认消息
     public void endTransaction(
         final SendResult sendResult,
         final LocalTransactionState localTransactionState,
@@ -1506,7 +1509,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         requestHeader.setTransactionId(transactionId);
         requestHeader.setCommitLogOffset(id.getOffset());
         switch (localTransactionState) {
-            case COMMIT_MESSAGE:
+            case COMMIT_MESSAGE://设置事务的确认消息的类型，是提交还是回滚
                 requestHeader.setCommitOrRollback(MessageSysFlag.TRANSACTION_COMMIT_TYPE);
                 break;
             case ROLLBACK_MESSAGE:

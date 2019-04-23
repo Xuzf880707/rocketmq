@@ -531,7 +531,7 @@ public class MQClientAPIImpl {
         final Message msg,
         final RemotingCommand response
     ) throws MQBrokerException, RemotingCommandException {
-        switch (response.getCode()) {
+        switch (response.getCode()) {//如果返回响应
             case ResponseCode.FLUSH_DISK_TIMEOUT://磁盘冲刷超时
             case ResponseCode.FLUSH_SLAVE_TIMEOUT://异步复制超时
             case ResponseCode.SLAVE_NOT_AVAILABLE: {//slave不可用
@@ -939,7 +939,7 @@ public class MQClientAPIImpl {
 
         throw new MQBrokerException(response.getCode(), response.getRemark());
     }
-
+    //发送事务确认消息
     public void endTransactionOneway(
         final String addr,
         final EndTransactionRequestHeader requestHeader,
