@@ -1467,7 +1467,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             default:
                 break;
         }
-        //获得本地事务返回的状态，并发送给broker
+        //producer会先向broker发送一条prepared消息，prepared事务消息发送成功后，会执行本地事务。当本地事务执行完后，开始第二次向broker发送消息，
+        //第二次向broker发送的消息可以是提交事务的消息，也可能是是回滚消息
         try {
             this.endTransaction(sendResult, localTransactionState, localException);
         } catch (Exception e) {
@@ -1492,7 +1493,16 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         Message msg) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         return send(msg, this.defaultMQProducer.getSendMsgTimeout());
     }
-    //根据本地事务的执行状态，向broker提交事务确认消息
+
+    /***
+     * 发送事务的第二条确认消息
+     * @param sendResult prepared消息发送的结果
+     * @param localTransactionState 向broker提交的事务状态
+     * @param localException
+     * @throws RemotingException
+     * @throws InterruptedException
+     * @throws UnknownHostException
+     */
     public void endTransaction(
         final SendResult sendResult,
         final LocalTransactionState localTransactionState,
@@ -1504,10 +1514,11 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             id = MessageDecoder.decodeMessageId(sendResult.getMsgId());
         }
         String transactionId = sendResult.getTransactionId();
+        //保证直接找到prepared消息所处的broker
         final String brokerAddr = this.mQClientFactory.findBrokerAddressInPublish(sendResult.getMessageQueue().getBrokerName());
         EndTransactionRequestHeader requestHeader = new EndTransactionRequestHeader();
         requestHeader.setTransactionId(transactionId);
-        requestHeader.setCommitLogOffset(id.getOffset());
+        requestHeader.setCommitLogOffset(id.getOffset());//初始化消息在队列中的offset，方便查找定位
         switch (localTransactionState) {
             case COMMIT_MESSAGE://设置事务的确认消息的类型，是提交还是回滚
                 requestHeader.setCommitOrRollback(MessageSysFlag.TRANSACTION_COMMIT_TYPE);

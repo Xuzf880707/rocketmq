@@ -546,7 +546,7 @@ public abstract class NettyRemotingAbstract {
     }
 
     /***
-     * 事务的第二阶段提交
+     * 事务的第二阶段提交，通过信号量来解决高并发
      * @param channel
      * @param request
      * @param timeoutMillis
