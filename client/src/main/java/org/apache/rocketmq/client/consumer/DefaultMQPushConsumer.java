@@ -289,10 +289,10 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
      * @param allocateMessageQueueStrategy Message queue allocating algorithm.
      */
     /***
-     * 创建一个push消费者的实现
-     * @param consumerGroup
+     * 创建一个采用push模式消费的消费者实现
+     * @param consumerGroup 消费者组
      * @param rpcHook
-     * @param allocateMessageQueueStrategy
+     * @param allocateMessageQueueStrategy 负载均衡策略
      */
     public DefaultMQPushConsumer(final String consumerGroup, RPCHook rpcHook,
         AllocateMessageQueueStrategy allocateMessageQueueStrategy) {
@@ -365,7 +365,8 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
      * @param consumerGroup Consumer group.
      */
     /***
-     * 指定消费者组，默认采用每个队列进行平均的消费模式
+     *  指定消费者组，默认采用每个队列进行平均的消费模式
+     *  这里我们发现，如果不指定队列负载均衡策略的话，默认采用均匀分配的策略
      * @param consumerGroup
      */
     public DefaultMQPushConsumer(final String consumerGroup) {

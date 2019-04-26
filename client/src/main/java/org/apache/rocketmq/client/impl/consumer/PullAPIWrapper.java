@@ -139,6 +139,26 @@ public class PullAPIWrapper {
         }
     }
 
+    /***
+     * 消费者向broker发送拉取消息的请求
+     * @param mq 目标队列
+     * @param subExpression 订阅表达式(包含topic和tag)
+     * @param expressionType  指定subExpression的类型，默认是Tag
+     * @param subVersion
+     * @param offset 发起拉取消息的请求，指定请求的开始offset
+     * @param maxNums  每次最多拉取数量
+     * @param sysFlag  指定拉取的消息的offset
+     * @param commitOffset // 当前消息队列 commitlog日志中当前的最新偏移量（内存中）
+     * @param brokerSuspendMaxTimeMillis
+     * @param timeoutMillis 超时时间
+     * @param communicationMode 拉取模式:SYNC ASYNC ONEWAY
+     * @param pullCallback 拉取消息后回调函数
+     * @return
+     * @throws MQClientException
+     * @throws RemotingException
+     * @throws MQBrokerException
+     * @throws InterruptedException
+     */
     public PullResult pullKernelImpl(
         final MessageQueue mq,
         final String subExpression,
@@ -153,6 +173,7 @@ public class PullAPIWrapper {
         final CommunicationMode communicationMode,
         final PullCallback pullCallback
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        //根据MQ的Broker信息获取查找Broker信息，封装成FindBrokerResult。
         FindBrokerResult findBrokerResult =
             this.mQClientFactory.findBrokerAddressInSubscribe(mq.getBrokerName(),
                 this.recalculatePullFromWhichNode(mq), false);
@@ -173,7 +194,7 @@ public class PullAPIWrapper {
                 }
             }
             int sysFlagInner = sysFlag;
-
+            //如果当前目标broker是slave的话
             if (findBrokerResult.isSlave()) {
                 sysFlagInner = PullSysFlag.clearCommitOffsetFlag(sysFlagInner);
             }
@@ -190,12 +211,12 @@ public class PullAPIWrapper {
             requestHeader.setSubscription(subExpression);
             requestHeader.setSubVersion(subVersion);
             requestHeader.setExpressionType(expressionType);
-
+            //获取目标broker的地址，如果消息拉取里带 FLAG_CLASS_FILTER
             String brokerAddr = findBrokerResult.getBrokerAddr();
             if (PullSysFlag.hasClassFilterFlag(sysFlagInner)) {
                 brokerAddr = computPullFromWhichFilterServer(mq.getTopic(), brokerAddr);
             }
-
+            //开始发送拉取消息的请求
             PullResult pullResult = this.mQClientFactory.getMQClientAPIImpl().pullMessage(
                 brokerAddr,
                 requestHeader,

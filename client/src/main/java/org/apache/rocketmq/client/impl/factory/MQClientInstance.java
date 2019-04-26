@@ -344,7 +344,7 @@ public class MQClientInstance {
             }
         }, 1000, this.clientConfig.getHeartbeatBrokerInterval(), TimeUnit.MILLISECONDS);
         /**
-         * 定时持久化所有消费者当前消费的的Offset
+         * 定时持久化所有消费者当前消费的的Offset，默认每隔5秒钟持久化一次
          */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
@@ -1035,11 +1035,15 @@ public class MQClientInstance {
         this.rebalanceService.wakeup();
     }
 
+    /***
+     * 遍历当前 Client 包含的 consumerTable( Consumer集合 )，执行消息队列分配
+     */
     public void doRebalance() {
         for (Map.Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
             MQConsumerInner impl = entry.getValue();
             if (impl != null) {
                 try {
+                    //开始进行队列分配
                     impl.doRebalance();
                 } catch (Throwable e) {
                     log.error("doRebalance exception", e);

@@ -620,6 +620,19 @@ public class MQClientAPIImpl {
         return null;
     }
 
+    /***
+     * 向broker发起拉取消息的请求
+     * @param addr
+     * @param request
+     * @param timeoutMillis
+     * @param pullCallback
+     * @throws RemotingException
+     * @throws InterruptedException
+     */
+    /**
+     * 1、拉取成功，则回调pullCallback.onSuccess方法，会在处理该拉取返回结果后会立马重新调用executePullRequestImmediately发起一个新的拉取请求
+     * 2、如果拉取消息返回失败，则会在3秒后重新发去拉取消息的请求，这个等待时间可以设置
+     */
     private void pullMessageAsync(
         final String addr,
         final RemotingCommand request,
@@ -652,6 +665,16 @@ public class MQClientAPIImpl {
         });
     }
 
+    /***
+     * 同步向目标地址发起拉取消息的请求
+     * @param addr 目标地址
+     * @param request 拉取消息的请求
+     * @param timeoutMillis 超时时间
+     * @return
+     * @throws RemotingException
+     * @throws InterruptedException
+     * @throws MQBrokerException
+     */
     private PullResult pullMessageSync(
         final String addr,
         final RemotingCommand request,

@@ -61,6 +61,12 @@ public class ConsumerStatsManager {
     public void shutdown() {
     }
 
+    /***
+     *
+     * @param group
+     * @param topic
+     * @param rt 成功拉取一批消息消耗的时间
+     */
     public void incPullRT(final String group, final String topic, final long rt) {
         this.topicAndGroupPullRT.addValue(topic + "@" + group, (int) rt, 1);
     }

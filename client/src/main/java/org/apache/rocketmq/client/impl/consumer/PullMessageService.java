@@ -95,6 +95,7 @@ public class PullMessageService extends ServiceThread {
         while (!this.isStopped()) {
             try {
                 //从队列中pullRequestQueue拉取消息，如果队列为空，则线程挂起
+                //PullRequest [consumerGroup=testRetryGroupName, messageQueue=MessageQueue [topic=testRetryTopic, brokerName=broker-a_2m-noslave, queueId=0], nextOffset=16]
                 PullRequest pullRequest = this.pullRequestQueue.take();
                 this.pullMessage(pullRequest);
             } catch (InterruptedException ignored) {
