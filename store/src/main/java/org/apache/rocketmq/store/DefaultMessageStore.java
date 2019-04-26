@@ -207,9 +207,10 @@ public class DefaultMessageStore implements MessageStore {
 
     /**
      * @throws Exception
+     * 启动消息存储服务
      */
     public void start() throws Exception {
-
+        //获得文件锁
         lock = lockFile.getChannel().tryLock(0, 1, false);
         if (lock == null || lock.isShared() || !lock.isValid()) {
             throw new RuntimeException("Lock failed,MQ already started");
@@ -217,8 +218,9 @@ public class DefaultMessageStore implements MessageStore {
 
         lockFile.getChannel().write(ByteBuffer.wrap("lock".getBytes()));
         lockFile.getChannel().force(true);
-
+        //  开启冲刷ConsumeQueue的服务
         this.flushConsumeQueueService.start();
+        //启动CommitLog线程
         this.commitLog.start();
         this.storeStatsService.start();
 
