@@ -87,15 +87,20 @@ public class BrokerStartup {
         }
     }
 
+    /***
+     * 创建一个brokerController实例，加载配置信息，检查nameserver地址合法性
+     * @param args
+     * @return
+     */
     public static BrokerController createBrokerController(String[] args) {
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
-
+        //com.rocketmq.remoting.socket.sndbuf.size：网络链接socket的发送消息的缓冲区
         if (null == System.getProperty(NettySystemConfig.COM_ROCKETMQ_REMOTING_SOCKET_SNDBUF_SIZE)) {
-            NettySystemConfig.socketSndbufSize = 131072;
+            NettySystemConfig.socketSndbufSize = 131072;//默认是128k
         }
 
         if (null == System.getProperty(NettySystemConfig.COM_ROCKETMQ_REMOTING_SOCKET_RCVBUF_SIZE)) {
-            NettySystemConfig.socketRcvbufSize = 131072;
+            NettySystemConfig.socketRcvbufSize = 131072;//默认是128k
         }
 
         try {
@@ -110,12 +115,12 @@ public class BrokerStartup {
             final BrokerConfig brokerConfig = new BrokerConfig();
             final NettyServerConfig nettyServerConfig = new NettyServerConfig();
             final NettyClientConfig nettyClientConfig = new NettyClientConfig();
-
+            //设置网络用户安全传输协议
             nettyClientConfig.setUseTLS(Boolean.parseBoolean(System.getProperty(TLS_ENABLE,
                 String.valueOf(TlsSystemConfig.tlsMode == TlsMode.ENFORCING))));
-            nettyServerConfig.setListenPort(10911);
+            nettyServerConfig.setListenPort(10911);//默认舰艇10911的端口
             final MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
-
+            //命中消息在内存的最大比例
             if (BrokerRole.SLAVE == messageStoreConfig.getBrokerRole()) {
                 int ratio = messageStoreConfig.getAccessMessageInMemoryMaxRatio() - 10;
                 messageStoreConfig.setAccessMessageInMemoryMaxRatio(ratio);
@@ -146,7 +151,7 @@ public class BrokerStartup {
                 System.out.printf("Please set the %s variable in your environment to match the location of the RocketMQ installation", MixAll.ROCKETMQ_HOME_ENV);
                 System.exit(-2);
             }
-
+            //检查nameserver地址配置的合法性
             String namesrvAddr = brokerConfig.getNamesrvAddr();
             if (null != namesrvAddr) {
                 try {
@@ -161,13 +166,13 @@ public class BrokerStartup {
                     System.exit(-3);
                 }
             }
-
+            //判断broker的角色：
             switch (messageStoreConfig.getBrokerRole()) {
-                case ASYNC_MASTER:
-                case SYNC_MASTER:
+                case ASYNC_MASTER://异步同步的master
+                case SYNC_MASTER://同步同步的master,对于master的话要设置brokerId
                     brokerConfig.setBrokerId(MixAll.MASTER_ID);
                     break;
-                case SLAVE:
+                case SLAVE://slave
                     if (brokerConfig.getBrokerId() <= 0) {
                         System.out.printf("Slave's brokerId must be > 0");
                         System.exit(-3);
@@ -177,7 +182,7 @@ public class BrokerStartup {
                 default:
                     break;
             }
-
+            //设置HA的监听端口，为10912
             messageStoreConfig.setHaListenPort(nettyServerConfig.getListenPort() + 1);
             LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
             JoranConfigurator configurator = new JoranConfigurator();
@@ -214,7 +219,7 @@ public class BrokerStartup {
                 messageStoreConfig);
             // remember all configs to prevent discard
             controller.getConfiguration().registerConfig(properties);
-
+            //初始化BrokerController
             boolean initResult = controller.initialize();
             if (!initResult) {
                 controller.shutdown();

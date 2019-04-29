@@ -98,18 +98,28 @@ public abstract class ServiceThread implements Runnable {
     }
 
     public void wakeup() {
+        //尝试唤醒正在等待的线程，并更新hasNotified，表示以唤醒过
         if (hasNotified.compareAndSet(false, true)) {
             waitPoint.countDown(); // notify
         }
     }
 
+    /***
+     * 查询等待interval毫秒。
+     *      如果之前该线程被通知唤醒过，则该次等待取消，直接继续返回等待结束。
+     *      如果之前该线程未被唤醒过，则进行等待 interval 毫秒，这里的锁采用CountDownLatch
+     * @param interval
+     */
     protected void waitForRunning(long interval) {
+        //hasNotified 如果是true表示，当前线程之前被通知唤醒过，则不需要等待，直接flush刷新。且将上一次唤醒的标志置为false
+        //如果hasNotified不曾被通知过，则阻塞等待interval毫秒
         if (hasNotified.compareAndSet(true, false)) {
             this.onWaitEnd();
             return;
         }
 
         //entry to wait
+        //恢复waitPoint的值，这是一个 CountDownLatch
         waitPoint.reset();
 
         try {

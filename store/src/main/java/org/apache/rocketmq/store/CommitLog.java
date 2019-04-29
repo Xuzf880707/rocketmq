@@ -606,6 +606,7 @@ public class CommitLog {
         //保证顺序写入
         putMessageLock.lock(); //spin or ReentrantLock ,depending on store config
         try {
+            //获取开始时钟
             long beginLockTimestamp = this.defaultMessageStore.getSystemClock().now();
             this.beginTimeInLock = beginLockTimestamp;
 
@@ -677,6 +678,17 @@ public class CommitLog {
         return putMessageResult;
     }
 
+    /***
+     * 同步刷盘
+     * @param result
+     * @param putMessageResult
+     * @param messageExt
+     *
+     * 1、获取刷盘的线程 GroupCommitService，调用GroupCommitService的putRequest方法将当前刷盘的请求GroupCommitRequest加入到GroupCommitService中维护的的队列，同时会通过countDown来唤醒刷盘的线程，使其继续刷盘
+     *      注意：每个 GroupCommitRequest 中包含一个flushOK状态用来记录该GroupCommitRequest是否刷盘成功。
+     * 2、同时每个GroupCommitRequest中都有一个与之对应的 countDownLatch，当GroupCommitService刷盘线程针对某个 GroupCommitRequest刷盘成功，则会调用countDownLatch.countDown来唤醒正在等待的GroupCommitRequest，
+     *      这样发送消息的线程即可继续往下执行。同时保证了刷盘的同步。
+     */
     public void handleDiskFlush(AppendMessageResult result, PutMessageResult putMessageResult, MessageExt messageExt) {
         // 同步刷盘
         if (FlushDiskType.SYNC_FLUSH == this.defaultMessageStore.getMessageStoreConfig().getFlushDiskType()) {
@@ -708,14 +720,20 @@ public class CommitLog {
         }
     }
 
+    /***
+     * HA主从进行备份实现高可用：分为同步和异步
+     * @param result
+     * @param putMessageResult
+     * @param messageExt
+     */
     public void handleHA(AppendMessageResult result, PutMessageResult putMessageResult, MessageExt messageExt) {
         if (BrokerRole.SYNC_MASTER == this.defaultMessageStore.getMessageStoreConfig().getBrokerRole()) {
             HAService service = this.defaultMessageStore.getHaService();
-            if (messageExt.isWaitStoreMsgOK()) {
+            if (messageExt.isWaitStoreMsgOK()) {//如果消息写成功了
                 // Determine whether to wait
-                if (service.isSlaveOK(result.getWroteOffset() + result.getWroteBytes())) {
+                if (service.isSlaveOK(result.getWroteOffset() + result.getWroteBytes())) {//如果从slave文件中获取到足够的内存，则开始往slave里写
                     GroupCommitRequest request = new GroupCommitRequest(result.getWroteOffset() + result.getWroteBytes());
-                    service.putRequest(request);
+                    service.putRequest(request);//向slave中写消息
                     service.getWaitNotifyObject().wakeupAll();
                     boolean flushOK =
                         request.waitForFlush(this.defaultMessageStore.getMessageStoreConfig().getSyncFlushTimeout());
@@ -1133,6 +1151,7 @@ public class CommitLog {
 
     /**
      * GroupCommit Service
+     * 同步刷盘的服务
      */
     class GroupCommitService extends FlushCommitLogService {
         //同步刷盘任务暂存容器
@@ -1140,6 +1159,11 @@ public class CommitLog {
         //GroupCommitService线程每次处理irequest容器，避免了任务提交和任务执行的锁冲突
         private volatile List<GroupCommitRequest> requestsRead = new ArrayList<GroupCommitRequest>();
         //将刷盘请求放到requestsWrite队列中，并唤醒等待线程
+
+        /***
+         * 将要刷盘的额消息添加到requestsWrite集合里，并唤醒正在等待的线程。进而调用doCommit
+         * @param request
+         */
         public synchronized void putRequest(final GroupCommitRequest request) {
             synchronized (this.requestsWrite) {
                 this.requestsWrite.add(request);

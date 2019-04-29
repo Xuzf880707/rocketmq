@@ -210,15 +210,18 @@ public class DefaultMessageStore implements MessageStore {
      * 启动消息存储服务
      */
     public void start() throws Exception {
-        //获得文件锁
+        //获得文件锁,加锁的位置，由position和size绝对，第三个参数表示是否共享锁，false表示独占锁，返回获得锁
+        //主要用来防止并发启动
         lock = lockFile.getChannel().tryLock(0, 1, false);
         if (lock == null || lock.isShared() || !lock.isValid()) {
             throw new RuntimeException("Lock failed,MQ already started");
         }
 
         lockFile.getChannel().write(ByteBuffer.wrap("lock".getBytes()));
+        //FileChannel.force()方法将通道里尚未写入磁盘的数据强制写到磁盘上。
+        //boolean参数指明是否同时将文件元数据（权限信息等）写到磁盘上。
         lockFile.getChannel().force(true);
-        //  开启冲刷ConsumeQueue的服务
+        //  开启冲刷ConsumeQueue的服务，默认 FlushConsumeQueueService，这是该类的一个内部类
         this.flushConsumeQueueService.start();
         //启动CommitLog线程
         this.commitLog.start();
@@ -305,6 +308,16 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    /**
+     *
+     * @param msg Message instance to store
+     * @return
+     * 1、检查broker是否可写入，是否正常
+     * 2、检查topic的长度是超过256个字节
+     * 3、检查消息不能超过65536
+     * 4、检查os的pagecace是否过于忙碌
+     * 5、持久化到commitLog
+     */
     public PutMessageResult putMessage(MessageExtBrokerInner msg) {
         if (this.shutdown) {
             log.warn("message store has shutdown, so putMessage is forbidden");
@@ -1664,10 +1677,11 @@ public class DefaultMessageStore implements MessageStore {
     class FlushConsumeQueueService extends ServiceThread {
         private static final int RETRY_TIMES_OVER = 3;
         private long lastFlushTimestamp = 0;
-
+        //将consumeQueue刷新到磁盘中
         private void doFlush(int retryTimes) {
+            //获得flushConsumeQueue时最少满足的page，只有满足最少页才刷新到磁盘中
             int flushConsumeQueueLeastPages = DefaultMessageStore.this.getMessageStoreConfig().getFlushConsumeQueueLeastPages();
-
+            //如果等于最大重试次数，则二话不说，一定要将内存中的consumeQueue落地到磁盘中
             if (retryTimes == RETRY_TIMES_OVER) {
                 flushConsumeQueueLeastPages = 0;
             }
@@ -1676,12 +1690,13 @@ public class DefaultMessageStore implements MessageStore {
 
             int flushConsumeQueueThoroughInterval = DefaultMessageStore.this.getMessageStoreConfig().getFlushConsumeQueueThoroughInterval();
             long currentTimeMillis = System.currentTimeMillis();
+            //如果当前时间超过上次flush的时间+配置的ConsumeQueue的时间间隔
             if (currentTimeMillis >= (this.lastFlushTimestamp + flushConsumeQueueThoroughInterval)) {
                 this.lastFlushTimestamp = currentTimeMillis;
                 flushConsumeQueueLeastPages = 0;
                 logicsMsgTimestamp = DefaultMessageStore.this.getStoreCheckpoint().getLogicsMsgTimestamp();
             }
-
+            //获得ConsumeQueue集合
             ConcurrentMap<String, ConcurrentMap<Integer, ConsumeQueue>> tables = DefaultMessageStore.this.consumeQueueTable;
 
             for (ConcurrentMap<Integer, ConsumeQueue> maps : tables.values()) {
@@ -1700,13 +1715,15 @@ public class DefaultMessageStore implements MessageStore {
                 DefaultMessageStore.this.getStoreCheckpoint().flush();
             }
         }
-
+        //线程启动
         public void run() {
             DefaultMessageStore.log.info(this.getServiceName() + " service started");
 
             while (!this.isStopped()) {
                 try {
+                    //获取定时刷新consumeQueue的时间
                     int interval = DefaultMessageStore.this.getMessageStoreConfig().getFlushIntervalConsumeQueue();
+                    //开启定时任务
                     this.waitForRunning(interval);
                     this.doFlush(1);
                 } catch (Exception e) {

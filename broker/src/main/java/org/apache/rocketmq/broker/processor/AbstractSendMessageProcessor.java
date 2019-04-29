@@ -68,6 +68,19 @@ public abstract class AbstractSendMessageProcessor implements NettyRequestProces
                 .getNettyServerConfig().getListenPort());
     }
 
+    /****
+     * 获取并初始化SendMessageContext：
+     *      producerGroup：消息组
+     *      topic：主题
+     *      msgPros：消息附加属性
+     *      BornHost：消息来源host
+     *      BrokerAddr：当前broker的地址
+     *
+     *
+     * @param ctx
+     * @param requestHeader
+     * @return
+     */
     protected SendMessageContext buildMsgContext(ChannelHandlerContext ctx,
         SendMessageRequestHeader requestHeader) {
         if (!this.hasSendMessageHook()) {
@@ -159,6 +172,16 @@ public abstract class AbstractSendMessageProcessor implements NettyRequestProces
         return response;
     }
 
+    /***
+     *
+     * @param ctx
+     * @param requestHeader
+     * @param response
+     * @return
+     * 1、消息是否有写权限，以及topic是否是一些broker本身预留的topic，如果是的话，也禁止往这些topic里写
+     * 2、不能往默认主题TBW102里发送消息
+     * 3、
+     */
     protected RemotingCommand msgCheck(final ChannelHandlerContext ctx,
         final SendMessageRequestHeader requestHeader, final RemotingCommand response) {
         //检查是否有写权限
@@ -169,7 +192,7 @@ public abstract class AbstractSendMessageProcessor implements NettyRequestProces
                 + "] sending message is forbidden");
             return response;
         }
-        //检查topic是否可以进行消息发送，主要针对默认主题，默认主题不能发送消息，仅仅由路由查找
+        //检查topic是否可以进行消息发送，主要针对默认主题，默认主题TBW102不能发送消息，仅仅由路由查找
         if (!this.brokerController.getTopicConfigManager().isTopicCanSendMessage(requestHeader.getTopic())) {
             String errorMsg = "the topic[" + requestHeader.getTopic() + "] is conflict with system reserved words.";
             log.warn(errorMsg);
@@ -278,7 +301,7 @@ public abstract class AbstractSendMessageProcessor implements NettyRequestProces
             }
         }
     }
-
+    //解码消息头
     protected SendMessageRequestHeader parseRequestHeader(RemotingCommand request)
         throws RemotingCommandException {
 

@@ -61,19 +61,31 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         super(brokerController);
     }
 
+    /***
+     * 处理请求
+     * @param ctx
+     * @param request
+     * @return
+     * @throws RemotingCommandException
+     * 1、获得请求消息头
+     * 2、可在broker端通过配置SendMessageHook来做一些日志相关的记录
+     * 3、发送消息，批量和单条的分别走不同的分支
+     */
     @Override
     public RemotingCommand processRequest(ChannelHandlerContext ctx,
                                           RemotingCommand request) throws RemotingCommandException {
         SendMessageContext mqtraceContext;
         switch (request.getCode()) {
+            //如果是由消费者发送返回的消息，则走该分支
             case RequestCode.CONSUMER_SEND_MSG_BACK:
                 return this.consumerSendMsgBack(ctx, request);
             default:
+                //获得消息头
                 SendMessageRequestHeader requestHeader = parseRequestHeader(request);
                 if (requestHeader == null) {
                     return null;
                 }
-
+                //创建消息的追踪信息
                 mqtraceContext = buildMsgContext(ctx, requestHeader);
                 this.executeSendMessageHookBefore(ctx, request, mqtraceContext);
 
@@ -248,12 +260,21 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         return response;
     }
 
+    /***
+     * 处理发往重试队列和死信队列的消息
+     * @param requestHeader
+     * @param response
+     * @param request
+     * @param msg
+     * @param topicConfig
+     * @return
+     */
     private boolean handleRetryAndDLQ(SendMessageRequestHeader requestHeader, RemotingCommand response,
                                       RemotingCommand request,
                                       MessageExt msg, TopicConfig topicConfig) {
         String newTopic = requestHeader.getTopic();
-        if (null != newTopic && newTopic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
-            String groupName = newTopic.substring(MixAll.RETRY_GROUP_TOPIC_PREFIX.length());
+        if (null != newTopic && newTopic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {//如果是发往重试主题
+            String groupName = newTopic.substring(MixAll.RETRY_GROUP_TOPIC_PREFIX.length());//后的重试队列所属的组
             SubscriptionGroupConfig subscriptionGroupConfig =
                 this.brokerController.getSubscriptionGroupManager().findSubscriptionGroupConfig(groupName);
             if (null == subscriptionGroupConfig) {
@@ -262,13 +283,16 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                     "subscription group not exist, " + groupName + " " + FAQUrl.suggestTodo(FAQUrl.SUBSCRIPTION_GROUP_NOT_EXIST));
                 return false;
             }
-
+            //获取最大重试次数
             int maxReconsumeTimes = subscriptionGroupConfig.getRetryMaxTimes();
             if (request.getVersion() >= MQVersion.Version.V3_4_9.ordinal()) {
                 maxReconsumeTimes = requestHeader.getMaxReconsumeTimes();
             }
+            //获取当前重试次数
             int reconsumeTimes = requestHeader.getReconsumeTimes() == null ? 0 : requestHeader.getReconsumeTimes();
+            //如果当前重试次数大于等于最大重试次数
             if (reconsumeTimes >= maxReconsumeTimes) {
+                //获得组对应的死信队列
                 newTopic = MixAll.getDLQTopic(groupName);
                 int queueIdInt = Math.abs(this.random.nextInt() % 99999999) % DLQ_NUMS_PER_GROUP;
                 topicConfig = this.brokerController.getTopicConfigManager().createTopicInSendMessageBackMethod(newTopic,
@@ -292,22 +316,42 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         return true;
     }
 
+    /***
+     * 开始发送消息
+     * @param ctx
+     * @param request
+     * @param sendMessageContext
+     * @param requestHeader
+     * @return
+     * @throws RemotingCommandException
+     */
+    /***
+     *
+     *1、初始化创建响应command
+     * 2、检查当前broker是否可以开始接收消息
+     * 3、校验消息的合法性：
+     * 4、对于重试消息或者重试超过次数的死信消息，重定向消息的目标主题。
+     * 5、对于事务消息，检查broker是否支持事务消息。
+     * 5、调用DefaultMessageStore.putMessage持久化消息。
+     *      注意，如果是事务消息的话，调用TransactionalMessageServiceImpl.prepareMessage来持久化消息
+     */
     private RemotingCommand sendMessage(final ChannelHandlerContext ctx,
                                         final RemotingCommand request,
                                         final SendMessageContext sendMessageContext,
-                                        final SendMessageRequestHeader requestHeader) throws RemotingCommandException {
-
+                                        final SendMessageRequestHeader requestHeader) {
+        //初始化command，初始化响应头：SendMessageResponseHeader
         final RemotingCommand response = RemotingCommand.createResponseCommand(SendMessageResponseHeader.class);
         final SendMessageResponseHeader responseHeader = (SendMessageResponseHeader)response.readCustomHeader();
 
         response.setOpaque(request.getOpaque());
-
+        //像响应信息里添加额外信息：当前所属broker和师傅需要追踪
         response.addExtField(MessageConst.PROPERTY_MSG_REGION, this.brokerController.getBrokerConfig().getRegionId());
         response.addExtField(MessageConst.PROPERTY_TRACE_SWITCH, String.valueOf(this.brokerController.getBrokerConfig().isTraceOn()));
 
         log.debug("receive SendMessage request command, {}", request);
-
+        //获取broker端配置的开始接收消息的时间
         final long startTimstamp = this.brokerController.getBrokerConfig().getStartAcceptSendRequestTimeStamp();
+        //如果还没到开始接收消息的时间，则直接拒绝返回错误
         if (this.brokerController.getMessageStore().now() < startTimstamp) {
             response.setCode(ResponseCode.SYSTEM_ERROR);
             response.setRemark(String.format("broker unable to service, until %s", UtilAll.timeMillisToHumanString2(startTimstamp)));
@@ -315,6 +359,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         }
 
         response.setCode(-1);
+        //检查消息的合法性
         super.msgCheck(ctx, requestHeader, response);
         if (response.getCode() != -1) {
             return response;
@@ -322,7 +367,8 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
 
         final byte[] body = request.getBody();
 
-        int queueIdInt = requestHeader.getQueueId();
+        int queueIdInt = requestHeader.getQueueId();//获得目标队列id
+
         TopicConfig topicConfig = this.brokerController.getTopicConfigManager().selectTopicConfig(requestHeader.getTopic());
 
         if (queueIdInt < 0) {
@@ -332,7 +378,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         MessageExtBrokerInner msgInner = new MessageExtBrokerInner();
         msgInner.setTopic(requestHeader.getTopic());
         msgInner.setQueueId(queueIdInt);
-
+        //重新根据重试信息来判断是发往重试队列还是死信队列
         if (!handleRetryAndDLQ(requestHeader, response, request, msgInner, topicConfig)) {
             return response;
         }
@@ -348,8 +394,8 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         PutMessageResult putMessageResult = null;
         Map<String, String> oriProps = MessageDecoder.string2messageProperties(requestHeader.getProperties());
         String traFlag = oriProps.get(MessageConst.PROPERTY_TRANSACTION_PREPARED);
-        if (traFlag != null && Boolean.parseBoolean(traFlag)) {
-            if (this.brokerController.getBrokerConfig().isRejectTransactionMessage()) {
+        if (traFlag != null && Boolean.parseBoolean(traFlag)) {//如果是事务状态为prepared状态的消息
+            if (this.brokerController.getBrokerConfig().isRejectTransactionMessage()) {//如果broker本身拒绝事务消息，则直接拒绝消息写入
                 response.setCode(ResponseCode.NO_PERMISSION);
                 response.setRemark(
                     "the broker[" + this.brokerController.getBrokerConfig().getBrokerIP1()
@@ -473,7 +519,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
     private RemotingCommand sendBatchMessage(final ChannelHandlerContext ctx,
                                              final RemotingCommand request,
                                              final SendMessageContext sendMessageContext,
-                                             final SendMessageRequestHeader requestHeader) throws RemotingCommandException {
+                                             final SendMessageRequestHeader requestHeader) {
 
         final RemotingCommand response = RemotingCommand.createResponseCommand(SendMessageResponseHeader.class);
         final SendMessageResponseHeader responseHeader = (SendMessageResponseHeader)response.readCustomHeader();

@@ -170,9 +170,12 @@ public class BrokerController {
         this.nettyServerConfig = nettyServerConfig;
         this.nettyClientConfig = nettyClientConfig;
         this.messageStoreConfig = messageStoreConfig;
+        //管理consumerOffset
         this.consumerOffsetManager = new ConsumerOffsetManager(this);
         this.topicConfigManager = new TopicConfigManager(this);
+        //消息拉取的处理器
         this.pullMessageProcessor = new PullMessageProcessor(this);
+        //拉取消息服务欧
         this.pullRequestHoldService = new PullRequestHoldService(this);
         this.messageArrivingListener = new NotifyMessageArrivingListener(this.pullRequestHoldService);
         this.consumerIdsChangeListener = new DefaultConsumerIdsChangeListener(this);
@@ -223,8 +226,9 @@ public class BrokerController {
     }
 
     public boolean initialize() throws CloneNotSupportedException {
-        boolean result = this.topicConfigManager.load();
 
+        //加载持久化文件的存储路径
+        boolean result = this.topicConfigManager.load();
         result = result && this.consumerOffsetManager.load();
         result = result && this.subscriptionGroupManager.load();
         result = result && this.consumerFilterManager.load();
@@ -823,6 +827,7 @@ public class BrokerController {
     }
 
     public void start() throws Exception {
+        //启动消息存储服务，默认: DefaultMessageStore
         if (this.messageStore != null) {
             this.messageStore.start();
         }

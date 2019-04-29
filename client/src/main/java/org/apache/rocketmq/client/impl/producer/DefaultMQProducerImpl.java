@@ -631,6 +631,16 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
     /***
      * 根据topic和上一次的broker选择broker用来发送消息
+     * TopicPublishInfo [orderTopic=false, messageQueueList=[
+     * 	MessageQueue [topic=sametopic2, brokerName=broker-a_2m-noslave, queueId=0],
+     * 	MessageQueue [topic=sametopic2, brokerName=broker-a_2m-noslave, queueId=1],
+     * 	MessageQueue [topic=sametopic2, brokerName=broker-a_2m-noslave, queueId=2],
+     * 	MessageQueue [topic=sametopic2, brokerName=broker-a_2m-noslave, queueId=3],
+     * 	MessageQueue [topic=sametopic2, brokerName=broker-b_2m-noslave, queueId=0],
+     * 	MessageQueue [topic=sametopic2, brokerName=broker-b_2m-noslave, queueId=1],
+     * 	MessageQueue [topic=sametopic2, brokerName=broker-b_2m-noslave, queueId=2],
+     * 	MessageQueue [topic=sametopic2, brokerName=broker-b_2m-noslave, queueId=3]],
+     * 	sendWhichQueue=ThreadLocalIndex{threadLocalIndex=null}, haveTopicRouterInfo=true]
      * @param tpInfo
      * @param lastBrokerName
      * @return

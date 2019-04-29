@@ -1037,8 +1037,10 @@ public class MQClientInstance {
 
     /***
      * 遍历当前 Client 包含的 consumerTable( Consumer集合 )，执行消息队列分配
+     * 1、获得本地所有的消费者列表。然后对每个消费者进行重分配，移除不存在的topic对应的MessageQueue
      */
     public void doRebalance() {
+        //遍历本地缓存中所有的消费者，对每个消费者根据自己的订阅主题，更新订阅消息
         for (Map.Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
             MQConsumerInner impl = entry.getValue();
             if (impl != null) {

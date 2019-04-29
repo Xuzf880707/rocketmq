@@ -216,12 +216,15 @@ public abstract class RebalanceImpl {
         }
     }
     /**
-       * 执行分配消息队列
+       * 对当前消费者重新分配消息队列
        *
        * @param isOrder 是否顺序消息
+     *
+     *   1、获取当前消费者订阅的主题列表，并进行遍历主题对每个主题进行重分配
+     *
        */
     public void doRebalance(final boolean isOrder) {
-        //// 分配每个 topic 的消息队列
+        //遍历当前Consumer
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
         if (subTable != null) {
             for (final Map.Entry<String, SubscriptionData> entry : subTable.entrySet()) {
@@ -269,7 +272,9 @@ public abstract class RebalanceImpl {
             }
             //获取 Topic 对应的消息队列和消费者们，并对其进行排序。因为各 Consumer 是在本地分配消息队列，排序后才能保证各 Consumer 顺序一致。
             case CLUSTERING: {
+                //从本地缓存中获取当前消费者负责的MessageQueue列表
                 Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
+                //从broker中获取topic的路由信息
                 List<String> cidAll = this.mQClientFactory.findConsumerIdList(topic, consumerGroup);
                 if (null == mqSet) {
                     if (!topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
