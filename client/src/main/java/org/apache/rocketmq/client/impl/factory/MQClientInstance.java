@@ -419,13 +419,15 @@ public class MQClientInstance {
 
     /**
      * Remove offline broker
+     * 清理离线的broker，根据topicRouteTable(这个是通过定时从nameserver里获取更新)，判断broker地址是否不存在，如果是的，则移除，同时更新本地缓存brokerAddrTable
+     *
      */
     private void cleanOfflineBroker() {
         try {
             if (this.lockNamesrv.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS))
                 try {
                     ConcurrentHashMap<String, HashMap<Long, String>> updatedTable = new ConcurrentHashMap<String, HashMap<Long, String>>();
-
+                    //从本地缓存中获取Broker列表并进行并列
                     Iterator<Entry<String, HashMap<Long, String>>> itBrokerTable = this.brokerAddrTable.entrySet().iterator();
                     while (itBrokerTable.hasNext()) {
                         Entry<String, HashMap<Long, String>> entry = itBrokerTable.next();
@@ -439,6 +441,7 @@ public class MQClientInstance {
                         while (it.hasNext()) {
                             Entry<Long, String> ee = it.next();
                             String addr = ee.getValue();
+                            //根据topicRouteTable，判断broker地址是否不存在，如果是的，则移除
                             if (!this.isBrokerAddrExistInTopicRouteTable(addr)) {
                                 it.remove();
                                 log.info("the broker addr[{} {}] is offline, remove it", brokerName, addr);
