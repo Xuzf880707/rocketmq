@@ -167,11 +167,15 @@ public class MQClientInstance {
 
     /***
      *  将 Topic路由数据 转换成 Topic发布信息
-     *      如果nameServer上配置了 ORDER_TOPIC_CONFIG ，则维护的broker的主题列表必须按照配置的顺序
-     *       如果nameServer上未配置 ORDER_TOPIC_CONFIG 则默认根据 broker 的名称来排序
+     *      如果nameServer上配置了 ORDER_TOPIC_CONFIG ，则MessageQueueList维护的messageQueue必须按照配置的broker顺序来维护
+     *       如果nameServer上未配置 ORDER_TOPIC_CONFIG 则MessageQueueList维护的messageQueue则按照broker的名称来维护
      * @param topic
      * @param route
      * @return
+     *TopicPublishInfo结构：
+     *      MessageQueueList：包含所有broker对应的messageQueue
+     *      orderTopic：反应MessageQueueList的messageQueue是否按照指定顺序维护的列表，默认是按照broker名称来维护messageQueue.
+     *      TopicRouteData：路由信息
      */
     public static TopicPublishInfo topicRouteData2TopicPublishInfo(final String topic, final TopicRouteData route) {
         TopicPublishInfo info = new TopicPublishInfo();
@@ -179,7 +183,7 @@ public class MQClientInstance {
         //获取topic排序的配置 orderTopicConf，orderTopiconf配置了broker 的顺序，orderTopiconf 的参数格式为：以“ ;”解析成数组，数组的每个成员是以“ :”分隔的，构成数据 “ brokerName:queueNum”；
         //根据nameServer上的配置 ORDER_TOPIC_CONFIG 和topic来返回一个由 ORDER_TOPIC_CONFIG 指定队列顺序的路由列表
         if (route.getOrderTopicConf() != null && route.getOrderTopicConf().length() > 0) {
-            String[] brokers = route.getOrderTopicConf().split(";");
+            String[] brokers = route.getOrderTopicConf().split(";");//获取有序
             for (String broker : brokers) {
                 String[] item = broker.split(":");
                 int nums = Integer.parseInt(item[1]);
@@ -652,6 +656,10 @@ public class MQClientInstance {
      * @param isDefault
      * @param defaultMQProducer 默认是null
      * @return
+     * 1、从nameServer上获取最新的broker列表以及broker中对应的MessageQueue列表(当有新的broker加入集群中的时候，它会注册到nameserver，所以这样client就可以获得最新的broker中的queue)
+     * 2、更新MQClientInstance中的topicRouteTable缓存；
+     * 3、更新MQClientInstance中的producerTable列表中订阅了该topic的producer中的topicPublishInfoTable
+     * 4、更新MQClientInstance中的producerTable列表中订阅了该topic的consumer中的topicSubscribeInfoTable
      */
     public boolean updateTopicRouteInfoFromNameServer(final String topic, boolean isDefault,
         DefaultMQProducer defaultMQProducer) {
@@ -670,7 +678,9 @@ public class MQClientInstance {
                                 data.setWriteQueueNums(queueNums);
                             }
                         }
-                    } else {//从nameServer中获得主题的路由信息
+                    } else {
+                        //从nameServer中获得主题的路由信息。topic会为每个broker创建路由信息
+                        //TopicRouteData中包含MessageQueue信息，包含broker信息
                         topicRouteData = this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, 1000 * 3);
                     }
                     if (topicRouteData != null) {
@@ -679,24 +689,27 @@ public class MQClientInstance {
                         //判断路由信息是否发生过变化
                         boolean changed = topicRouteDataIsChange(old, topicRouteData);
                         if (!changed) {
+                            //如果topic对应的路由信息没有发生改变，则检查下本地生产者和消费者中维护的路由信息是否需要更新。
                             changed = this.isNeedUpdateTopicRouteInfo(topic);
                         } else {
                             log.info("the topic[{}] route info changed, old[{}] ,new[{}]", topic, old, topicRouteData);
                         }
 
-                        if (changed) {//如果路由信息发生变化
+                        if (changed) {//如果topic对应的路由信息发生变化(比如新增了一台broker机器等)
+                            //TopicRouteData中包含MessageQueue信息，包含broker信息
                             TopicRouteData cloneTopicRouteData = topicRouteData.cloneTopicRouteData();
-                            //循环主题的路由信息，更新broker集群地址信息
+                            //循环topic的broker信息，更新本地缓存中broker集群地址信息
                             for (BrokerData bd : topicRouteData.getBrokerDatas()) {
                                 this.brokerAddrTable.put(bd.getBrokerName(), bd.getBrokerAddrs());
                             }
 
                             // Update Pub info
                             {
-                                //用nameserver上的路由信息更新本地缓存的发布的路由信息
+                                //根据返回的topicRouteData，对所有的broker中的MessageQueue进行排序，然后存放到 TopicPublishInfo
                                 TopicPublishInfo publishInfo = topicRouteData2TopicPublishInfo(topic, topicRouteData);
                                 publishInfo.setHaveTopicRouterInfo(true);
                                 Iterator<Entry<String, MQProducerInner>> it = this.producerTable.entrySet().iterator();
+                                //循环本地所有的生产者，更新每个生产者中topicPublishInfoTable的本地缓存
                                 while (it.hasNext()) {
                                     Entry<String, MQProducerInner> entry = it.next();
                                     MQProducerInner impl = entry.getValue();
@@ -708,8 +721,10 @@ public class MQClientInstance {
 
                             //用nameserver上的路由信息更新本地缓存的订阅的路由信息
                             {
+                                //获得topic对应的所有broker的messageQueue
                                 Set<MessageQueue> subscribeInfo = topicRouteData2TopicSubscribeInfo(topic, topicRouteData);
                                 Iterator<Entry<String, MQConsumerInner>> it = this.consumerTable.entrySet().iterator();
+                                //循环本地所有的生产者，检查这些消费者是否订阅了对应的topic，如果订阅了，则更新对应consumer中的topicSubscribeInfoTable本地缓存
                                 while (it.hasNext()) {
                                     Entry<String, MQConsumerInner> entry = it.next();
                                     MQConsumerInner impl = entry.getValue();
@@ -924,6 +939,12 @@ public class MQClientInstance {
         }
     }
 
+    /**
+     * 如果组名重复了，则报错
+     * @param group
+     * @param consumer
+     * @return
+     */
     public boolean registerConsumer(final String group, final MQConsumerInner consumer) {
         if (null == group || null == consumer) {
             return false;
@@ -1149,6 +1170,15 @@ public class MQClientInstance {
         return 0;
     }
 
+    /***
+     *
+     * @param topic
+     * @param group
+     * @return
+     * 1、检查本地topicRouteTable是否缓存了topic对应的 TopicRouteData 路由信息，并从中随机选中一个 brokerAddr
+     * 2、如果本地没有的话，则从nameServer上获取最新的TopicRouteData信息，并随机获取一个brokerAddr
+     * 3、根据brokerAddr、组名获取同组的消费者列表
+     */
     public List<String> findConsumerIdList(final String topic, final String group) {
         String brokerAddr = this.findBrokerAddrByTopic(topic);
         if (null == brokerAddr) {
@@ -1158,6 +1188,7 @@ public class MQClientInstance {
 
         if (null != brokerAddr) {
             try {
+                //
                 return this.mQClientAPIImpl.getConsumerIdListByGroup(brokerAddr, group, 3000);
             } catch (Exception e) {
                 log.warn("getConsumerIdListByGroup exception, " + brokerAddr + " " + group, e);
@@ -1167,6 +1198,11 @@ public class MQClientInstance {
         return null;
     }
 
+    /***
+     *         //获得刚从nameserver上更新的TopicRouteData，里面包含了所有的broker，然后随机选中一个broker
+     * @param topic
+     * @return
+     */
     public String findBrokerAddrByTopic(final String topic) {
         TopicRouteData topicRouteData = this.topicRouteTable.get(topic);
         if (topicRouteData != null) {

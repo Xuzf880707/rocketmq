@@ -204,6 +204,7 @@ public class MQClientAPIImpl {
      */
     public String fetchNameServerAddr() {
         try {
+            //从
             String addrs = this.topAddressing.fetchNSAddr();
             if (addrs != null) {
                 if (!addrs.equals(this.nameSrvAddr)) {
@@ -1264,7 +1265,8 @@ public class MQClientAPIImpl {
     }
 
     /***
-     * 根据主题从nameserver上获取路由信息
+     * 根据主题从nameserver上获取路由信息。
+     * 一个主题对应多个broker路由信息
      * @param topic
      * @param timeoutMillis
      * @param allowTopicNotExist

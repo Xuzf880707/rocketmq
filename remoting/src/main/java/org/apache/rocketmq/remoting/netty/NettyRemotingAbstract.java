@@ -370,7 +370,12 @@ public abstract class NettyRemotingAbstract {
      * </p>
      */
     /***
-     *被周期性的调用，用来移除响应超时的ResponseFuture
+     *被周期性的调用，用来移除响应超时的 ResponseFuture。
+     *      我们知道当客户端每向broker发送一次请求后，也会创建一个 ResponseFuture 作为本次请求响应的占位符并存储到 responseTable。
+     *      每个ResponseFuture内部都维护了一个countDownLatch，用来实现对该ResponseFuture的等待和唤醒该 ResponseFuture 。同时也维护了一个信号量引用，多个ResponseFuture共享一个信号量。
+     *      当等待超时的时候，就可以调用信号量释放，这样就可以为别的发送请求开通许可证，从而控制request的并发量
+     *
+     *
      */
     public void scanResponseTable() {
         final List<ResponseFuture> rfList = new LinkedList<ResponseFuture>();
@@ -378,15 +383,15 @@ public abstract class NettyRemotingAbstract {
         while (it.hasNext()) {
             Entry<Integer, ResponseFuture> next = it.next();
             ResponseFuture rep = next.getValue();
-
+            //如果请求等待超时，则移除，并释放信号量，保证后面的可以继续请求
             if ((rep.getBeginTimestamp() + rep.getTimeoutMillis() + 1000) <= System.currentTimeMillis()) {
-                rep.release();
+                rep.release();//释放一个信号量
                 it.remove();
                 rfList.add(rep);
                 log.warn("remove timeout request, " + rep);
             }
         }
-
+        //
         for (ResponseFuture rf : rfList) {
             try {
                 executeInvokeCallback(rf);

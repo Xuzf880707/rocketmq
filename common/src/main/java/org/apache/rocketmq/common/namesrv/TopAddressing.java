@@ -64,6 +64,12 @@ public class TopAddressing {
         return fetchNSAddr(true, 3000);
     }
 
+    /***
+     * 获取最新的NameServer地址，当出现扩容或缩容的时候返回值会发生变更
+     * @param verbose
+     * @param timeoutMills
+     * @return
+     */
     public final String fetchNSAddr(boolean verbose, long timeoutMills) {
         String url = this.wsAddr;
         try {

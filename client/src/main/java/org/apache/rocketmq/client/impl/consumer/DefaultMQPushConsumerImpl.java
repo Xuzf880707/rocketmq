@@ -599,7 +599,15 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
      *
      * @throws MQClientException
      * 1、维护主题和订阅信息
-     * 2、
+     * 2、为消费者初始化相关信息：
+     *      创建一个MQClient用于跟broker进行网络通信
+     *      设置消息模式:集群或广播
+     *      设置负载均衡分配策略：默认是按队列平均分配，可通过defaultMQPushConsumer.setAllocateMessageQueueStrategy来自定义
+     *      注册FilterMessageHook
+     *      配置持久化comsumeOffset的类型，默认是RemoteBrokerOffsetStore，可通过defaultMQPushConsumer.setOffsetStore来设置自定义的持久化策略
+     *      初始化设置消息消费模式：顺序消费或并发无序消费，可通过registerMessageListener来注册设置
+     *
+     * 3、启动消息消费服务，开启定时清理等待超时的响应的消息的任务。
      */
     public synchronized void start() throws MQClientException {
         switch (this.serviceState) {
@@ -666,7 +674,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                  *      这里的清理是将消费超时的消息发送回broker,broker会保存到延迟队列中
                  */
                 this.consumeMessageService.start();
-
+                //将消费者维护到MQClient的consumerTable里，key是组名，value是DefaultMQPushConsumer
                 boolean registerOK = mQClientFactory.registerConsumer(this.defaultMQPushConsumer.getConsumerGroup(), this);
                 if (!registerOK) {
                     this.serviceState = ServiceState.CREATE_JUST;
