@@ -861,7 +861,9 @@ public class BrokerController {
         }
 
         this.registerBrokerAll(true, false, true);
-
+        /***
+         * broker每隔10s向nameServer发送心跳包，更新NameServer里的brokerLiveTable
+         */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
