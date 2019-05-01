@@ -217,6 +217,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 this.mQClientFactory = MQClientManager.getInstance().getAndCreateMQClientInstance(this.defaultMQProducer, rpcHook);
                 //注册这个生产者，将自己加入到 MQClientInstance 管理中，方便后续调用网络请求，进行心跳检测
                 //根据 {grouName,DefaultMQProducerImpl} 维护MQClientInstance.producerTable，如果组名已存在，则更新失败，返回false。所以说groupName不能重复
+                //把producer注册到MQClientInstance是方便后续的网络请求，比如发送消息和心跳检测等
                 boolean registerOK = mQClientFactory.registerProducer(this.defaultMQProducer.getProducerGroup(), this);
                 if (!registerOK) {
                     this.serviceState = ServiceState.CREATE_JUST;
@@ -689,7 +690,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         long beginTimestampFirst = System.currentTimeMillis();
         long beginTimestampPrev = beginTimestampFirst;
         long endTimestamp = beginTimestampFirst;
-        //获得topic路由信息，第一次本地缓存topic的路由信息，查询NameServer查询获取，如果没有则会先创建再查询
+        //获得topic路由信息
+        //先从本地缓存里查找，如果没有则去nameserver里获取最新的tipic路由信息，并缓存到本地缓存里
         TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
         if (topicPublishInfo != null && topicPublishInfo.ok()) {//检查主题状态是否正常
             boolean callTimeout = false;
@@ -847,6 +849,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         if (topicPublishInfo.isHaveTopicRouterInfo() || topicPublishInfo.ok()) {
             return topicPublishInfo;
         } else {
+            //根据默认主题TBW102查询主题路由信息
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic, true, this.defaultMQProducer);
             topicPublishInfo = this.topicPublishInfoTable.get(topic);
             return topicPublishInfo;

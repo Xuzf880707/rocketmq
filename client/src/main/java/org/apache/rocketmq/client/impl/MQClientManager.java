@@ -55,7 +55,7 @@ public class MQClientManager {
      *        clientIp：客户端ip
      *        instanceName：根据rocketmq.client.name配置
      *
-     *
+     * clientId:ip+进程ID,所以如果是同一个JVM进程的多个生产者或消费者，只会创建一个MQClientInstance
      * @param clientConfig
      * @param rpcHook
      * @return

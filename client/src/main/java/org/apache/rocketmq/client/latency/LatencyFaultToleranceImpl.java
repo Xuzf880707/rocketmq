@@ -29,9 +29,10 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
 
     private final ThreadLocalIndex whichItemWorst = new ThreadLocalIndex();
     /***
-     *
+     *  更新失败条目
      * @param name broker
-     * @param currentLatency 请求到响应的实际消耗时间
+     * @param currentLatency 消息发送故障延迟时间
+     * @param notAvailableDuration 不可用持续时长，在这个时间内，broker将被规避
      */
     @Override
     public void updateFaultItem(final String name, final long currentLatency, final long notAvailableDuration) {
@@ -51,24 +52,33 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
             old.setStartTimestamp(System.currentTimeMillis() + notAvailableDuration);
         }
     }
+
+    /**
+     * 判断 broker是否可用
+     * @param brokerName
+     * @return
+     */
     //如果faultItem 中不存在该broker，返回true，当存在时，还需判断isAvailable
     @Override
-    public boolean isAvailable(final String name) {
-        final FaultItem faultItem = this.faultItemTable.get(name);
+    public boolean isAvailable(final String brokerName) {
+        final FaultItem faultItem = this.faultItemTable.get(brokerName);
         if (faultItem != null) {
             return faultItem.isAvailable();
         }
         return true;
     }
 
+    /***
+     * 移除fault条目，意味着Broker重新参与路由计算
+     * @param brokerName
+     */
     @Override
-    public void remove(final String name) {
-        this.faultItemTable.remove(name);
+    public void remove(final String brokerName) {
+        this.faultItemTable.remove(brokerName);
     }
 
     /***
-     * 1、遍历不可用的broker，
-     *
+     * 尝试从规避中的Broker中选中一个可用的Broker，如果没有找到，则返回null
      */
     @Override
     public String pickOneAtLeast() {
@@ -110,7 +120,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         //条目唯一键，这里是brokerName
         private final String name;
         private volatile long currentLatency;//本次消息发送延迟
-        private volatile long startTimestamp;//本次规避开始时间
+        private volatile long startTimestamp;//故障规避开始时间
 
         public FaultItem(final String name) {
             this.name = name;

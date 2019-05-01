@@ -29,10 +29,11 @@ public class TopicPublishInfo {
      */
     private boolean orderTopic = false;
     private boolean haveTopicRouterInfo = false;
-    //该主题的消息队列
+    //该主题下的消息队列
     private List<MessageQueue> messageQueueList = new ArrayList<MessageQueue>();
     //每选择一次消息队列，该值就会增1，到达最大值后会从0开始重新递增，该值主要是用来选择消息队列
     private volatile ThreadLocalIndex sendWhichQueue = new ThreadLocalIndex();
+    //主题路由元数据
     private TopicRouteData topicRouteData;
 
     public boolean isOrderTopic() {
@@ -71,7 +72,7 @@ public class TopicPublishInfo {
         this.haveTopicRouterInfo = haveTopicRouterInfo;
     }
     //lastBrokerName：上一次选择的执行发送消息失败的Broker。第一次执行消息队列选择时，lastBrokerName为null
-    //重试时候尽量避免连续两次的请求目标broker是同一个
+    //重试时候尽量避免连续两次的请求目标broker是同一个,也就是会规避上次MessageQueue所在的broker,否则还是很有可能再次失败
     public MessageQueue selectOneMessageQueue(final String lastBrokerName) {
         if (lastBrokerName == null) {
             return selectOneMessageQueue();

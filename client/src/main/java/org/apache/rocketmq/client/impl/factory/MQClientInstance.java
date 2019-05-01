@@ -550,7 +550,7 @@ public class MQClientInstance {
             }
         }
     }
-    //从NameServer上更新主题的路由信息
+    //从NameServer上根据指定主题查找路由信息
     public boolean updateTopicRouteInfoFromNameServer(final String topic) {
         return updateTopicRouteInfoFromNameServer(topic, false, null);
     }
@@ -671,7 +671,7 @@ public class MQClientInstance {
                 try {
                     TopicRouteData topicRouteData;
                     if (isDefault && defaultMQProducer != null) {
-                        //根据默认主题去查询主题的路由信息
+                        //根据默认主题去查询主题的路由信息（也就是根据TBW102主题）
                         topicRouteData = this.mQClientAPIImpl.getDefaultTopicRouteInfoFromNameServer(defaultMQProducer.getCreateTopicKey(),
                             1000 * 3);
                         if (topicRouteData != null) {//默认的主题路由信息存在，则更新读写队列个数
@@ -681,15 +681,15 @@ public class MQClientInstance {
                                 data.setWriteQueueNums(queueNums);
                             }
                         }
-                    } else {
+                    } else {//不根据默认主题，而是根据指定主题查询路由信息
                         //从nameServer中获得主题的路由信息。topic会为每个broker创建路由信息
                         //TopicRouteData中包含MessageQueue信息，包含broker信息
                         topicRouteData = this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, 1000 * 3);
                     }
                     if (topicRouteData != null) {
-                        //从本地缓存中获得默认主题的路由信息
+                        //从本地缓存中获得指定主题的路由信息
                         TopicRouteData old = this.topicRouteTable.get(topic);
-                        //判断路由信息是否发生过变化
+                        //判断路由信息是否发生过变化，通过比较本地缓存的路由信息和刚查询到的路由信息
                         boolean changed = topicRouteDataIsChange(old, topicRouteData);
                         if (!changed) {
                             //如果topic对应的路由信息没有发生改变，则检查下本地生产者和消费者中维护的路由信息是否需要更新。
@@ -701,7 +701,7 @@ public class MQClientInstance {
                         if (changed) {//如果topic对应的路由信息发生变化(比如新增了一台broker机器等)
                             //TopicRouteData中包含MessageQueue信息，包含broker信息
                             TopicRouteData cloneTopicRouteData = topicRouteData.cloneTopicRouteData();
-                            //循环topic的broker信息，更新本地缓存中broker集群地址信息
+                            //循环topic的broker信息，更新本地缓存中brokerName地址信息
                             for (BrokerData bd : topicRouteData.getBrokerDatas()) {
                                 this.brokerAddrTable.put(bd.getBrokerName(), bd.getBrokerAddrs());
                             }

@@ -26,9 +26,10 @@ public class MQFaultStrategy {
     private final static InternalLogger log = ClientLogger.getLog();
     //延迟的broker
     private final LatencyFaultTolerance<String> latencyFaultTolerance = new LatencyFaultToleranceImpl();
-    //是否开启故意延迟机制
+    //是否开启故意延迟机制,美容人是不启用broker故障延迟机制的
     private boolean sendLatencyFaultEnable = false;
-
+    //根据 currentLatency 本次消息发送延迟，从latencyMax尾部向前找到第一个比currentLatency小的索引index,如果没有则返回0，然后根据这个
+    //index从notAvailableDuration数组中取出对应的时间，在这个时长里，Broker将被设置为不可用
     private long[] latencyMax = {50L, 100L, 550L, 1000L, 2000L, 3000L, 15000L};
     private long[] notAvailableDuration = {0L, 0L, 30000L, 60000L, 120000L, 180000L, 600000L};
 
@@ -114,9 +115,9 @@ public class MQFaultStrategy {
         return tpInfo.selectOneMessageQueue(lastBrokerName);
     }
     /***
-     *
+     *如果消息发送异常后，会调用该方法
      * @param brokerName broker
-     * @param currentLatency 请求到响应的实际消耗时间
+     * @param currentLatency 本次小修发送延迟时间
      * @param isolation 发送成功：isolation=false，发送失败：isolation=true
      */
     public void updateFaultItem(final String brokerName, final long currentLatency, boolean isolation) {
