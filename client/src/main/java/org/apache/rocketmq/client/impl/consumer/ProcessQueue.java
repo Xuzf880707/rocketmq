@@ -46,6 +46,7 @@ public class ProcessQueue {
     public final static long REBALANCE_LOCK_INTERVAL = Long.parseLong(System.getProperty("rocketmq.client.rebalance.lockInterval", "20000"));
     private final static long PULL_MAX_IDLE_TIME = Long.parseLong(System.getProperty("rocketmq.client.pull.pullMaxIdleTime", "120000"));
     private final InternalLogger log = ClientLogger.getLog();
+    //读写锁，控制多线程并发修改msgTreeMap
     private final ReadWriteLock lockTreeMap = new ReentrantReadWriteLock();
     //消息存储器， 用来保存拉取到的消息。键为消息在ConsumeQueue中的偏移量，MessageExt为消息实体
     private final TreeMap<Long, MessageExt> msgTreeMap = new TreeMap<Long, MessageExt>();
@@ -61,7 +62,7 @@ public class ProcessQueue {
     private final TreeMap<Long, MessageExt> consumingMsgOrderlyTreeMap = new TreeMap<Long, MessageExt>();
     private final AtomicLong tryUnlockTimes = new AtomicLong(0);
     private volatile long queueOffsetMax = 0L;
-    // 该数据结构里的消息是否废弃
+    // 当前ProcessQueue是否被丢弃
     private volatile boolean dropped = false;
     // 上次执行拉取消息的时间
     private volatile long lastPullTimestamp = System.currentTimeMillis();
@@ -74,16 +75,24 @@ public class ProcessQueue {
     private volatile boolean consuming = false;
     // 该参数为调整线程池的时候提供了数据参考
     private volatile long msgAccCnt = 0;
-
+    /***
+     * 判断锁是否过期
+     * @return
+     */
     public boolean isLockExpired() {
         return (System.currentTimeMillis() - this.lastLockTimestamp) > REBALANCE_LOCK_MAX_LIVE_TIME;
     }
 
+    /***
+     * 判断PullMessageService是否空闲，默认是120s
+     * @return
+     */
     public boolean isPullExpired() {
         return (System.currentTimeMillis() - this.lastPullTimestamp) > PULL_MAX_IDLE_TIME;
     }
 
     /**
+     * 移除消费超时的消息，默认超过15分钟未消费的消息将延迟3个延迟级别再消费
      * 1、如果是顺序消费的话，不回清理processQueue中消费超时的msg,并直接返回
      * 2、定时每次从processQueue中遍历一批消息来检测是否消费超时(最多一次遍历16条)，遍历出来的时候按入队列时间从小到大
      *      a、检查processQueue是否为空，并且判断遍历出来的消息是否超时消费，因为时间本身是从小到大，所以一旦有个消费没超时，那么它后面的消息就肯定没有超时。（注意这里用的读锁，所以可以支持多线程读）
@@ -143,6 +152,11 @@ public class ProcessQueue {
         }
     }
 
+    /***
+     * 添加消息，pullMessageService拉取消息后，先调用该方法将消息添加到PreocessQueue
+     * @param msgs
+     * @return
+     */
     public boolean putMessage(final List<MessageExt> msgs) {
         boolean dispatchToConsume = false;
         try {
@@ -183,7 +197,7 @@ public class ProcessQueue {
 
         return dispatchToConsume;
     }
-
+    //获取当前消息最大间隔
     public long getMaxSpan() {
         try {
             this.lockTreeMap.readLock().lockInterruptibly();
@@ -200,7 +214,7 @@ public class ProcessQueue {
 
         return 0;
     }
-
+    //移除消息
     public long removeMessage(final List<MessageExt> msgs) {
         long result = -1;
         final long now = System.currentTimeMillis();
@@ -261,7 +275,7 @@ public class ProcessQueue {
     public void setLocked(boolean locked) {
         this.locked = locked;
     }
-
+    //将消息重新放到msgTreeMap
     public void rollback() {
         try {
             this.lockTreeMap.writeLock().lockInterruptibly();
@@ -276,6 +290,10 @@ public class ProcessQueue {
         }
     }
 
+    /**
+     *将消息consumingMsgOrderlyTreeMap中的消息移除，表示成功处理该批消息
+     * @return
+     */
     public long commit() {
         try {
             this.lockTreeMap.writeLock().lockInterruptibly();
@@ -298,7 +316,7 @@ public class ProcessQueue {
 
         return -1;
     }
-
+    //重新消费该批消息
     public void makeMessageToCosumeAgain(List<MessageExt> msgs) {
         try {
             this.lockTreeMap.writeLock().lockInterruptibly();

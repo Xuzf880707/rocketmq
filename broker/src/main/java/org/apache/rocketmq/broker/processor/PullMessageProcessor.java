@@ -86,6 +86,14 @@ public class PullMessageProcessor implements NettyRequestProcessor {
         return false;
     }
 
+    /**
+     * 处理拉取消息的请求
+     * @param channel
+     * @param request
+     * @param brokerAllowSuspend
+     * @return
+     * @throws RemotingCommandException
+     */
     private RemotingCommand processRequest(final Channel channel, RemotingCommand request, boolean brokerAllowSuspend)
         throws RemotingCommandException {
         RemotingCommand response = RemotingCommand.createResponseCommand(PullMessageResponseHeader.class);
@@ -388,7 +396,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                                 new ManyMessageTransfer(response.encodeHeader(getMessageResult.getBufferTotalSize()), getMessageResult);
                             channel.writeAndFlush(fileRegion).addListener(new ChannelFutureListener() {
                                 @Override
-                                public void operationComplete(ChannelFuture future) throws Exception {
+                                public void operationComplete(ChannelFuture future) {
                                     getMessageResult.release();
                                     if (!future.isSuccess()) {
                                         log.error("transfer many message by pagecache failed, {}", channel.remoteAddress(), future.cause());
@@ -531,7 +539,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
     }
 
     public void executeRequestWhenWakeup(final Channel channel,
-        final RemotingCommand request) throws RemotingCommandException {
+        final RemotingCommand request) {
         Runnable run = new Runnable() {
             @Override
             public void run() {
@@ -544,7 +552,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                         try {
                             channel.writeAndFlush(response).addListener(new ChannelFutureListener() {
                                 @Override
-                                public void operationComplete(ChannelFuture future) throws Exception {
+                                public void operationComplete(ChannelFuture future) {
                                     if (!future.isSuccess()) {
                                         log.error("processRequestWrapper response to {} failed",
                                             future.channel().remoteAddress(), future.cause());

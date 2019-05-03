@@ -43,6 +43,11 @@ public class PullMessageService extends ServiceThread {
         this.mQClientFactory = mQClientFactory;
     }
 
+    /***
+     * 延迟添加，交给定时任务线程池来处理
+     * @param pullRequest
+     * @param timeDelay
+     */
     public void executePullRequestLater(final PullRequest pullRequest, final long timeDelay) {
         if (!isStopped()) {
             this.scheduledExecutorService.schedule(new Runnable() {
@@ -56,6 +61,8 @@ public class PullMessageService extends ServiceThread {
         }
     }
     //提供立即添加的方式，将pullRequest添加到队列中
+    //1、在rocketmq根据pullRequest拉取任务执行完一次消息拉取后，又将pullRequest对象放入到pullRequestQueue
+    //2、ReblanceImpl在创建的时候，会添加一个pullRequest到pullRequestQueue
     public void executePullRequestImmediately(final PullRequest pullRequest) {
         try {
             this.pullRequestQueue.put(pullRequest);
@@ -76,8 +83,12 @@ public class PullMessageService extends ServiceThread {
         return scheduledExecutorService;
     }
 
+    /***
+     *
+     * @param pullRequest
+     */
     private void pullMessage(final PullRequest pullRequest) {
-        //获得可消费的消息，根据消息所属消费组，选择一个消费者进行消费
+        //获得可消费的消息，根据消息所属消费组，选择一个消费者内部实现类进行消费
         final MQConsumerInner consumer = this.mQClientFactory.selectConsumer(pullRequest.getConsumerGroup());
         if (consumer != null) {
             //注意这里，这边pull到后，会强制转换为一个DefaultMQPushConsumerImpl
@@ -94,10 +105,10 @@ public class PullMessageService extends ServiceThread {
         //一个死循环拉取消息
         while (!this.isStopped()) {
             try {
-                //从队列中pullRequestQueue拉取消息，如果队列为空，则线程挂起
+                //从队列中pullRequestQueue获取拉取任务，如果队列为空，则线程挂起，直到有拉取任务被放入
                 //PullRequest [consumerGroup=testRetryGroupName, messageQueue=MessageQueue [topic=testRetryTopic, brokerName=broker-a_2m-noslave, queueId=0], nextOffset=16]
                 PullRequest pullRequest = this.pullRequestQueue.take();
-                this.pullMessage(pullRequest);
+                this.pullMessage(pullRequest);//然后调用该方法进行真正的消息拉取
             } catch (InterruptedException ignored) {
             } catch (Exception e) {
                 log.error("Pull Message Service Run Method exception", e);

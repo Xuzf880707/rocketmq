@@ -69,14 +69,19 @@ public class PullAPIWrapper {
 
     public PullResult processPullResult(final MessageQueue mq, final PullResult pullResult,
         final SubscriptionData subscriptionData) {
+        //获得拉取结果
         PullResultExt pullResultExt = (PullResultExt) pullResult;
-
+        //更新维护最新拉取的消息的broker来源
         this.updatePullFromWhichNode(mq, pullResultExt.getSuggestWhichBrokerId());
+        //如果拉取到消息
         if (PullStatus.FOUND == pullResult.getPullStatus()) {
             ByteBuffer byteBuffer = ByteBuffer.wrap(pullResultExt.getMessageBinary());
+            //解码消息字节码，封装成MessageExt的列表
             List<MessageExt> msgList = MessageDecoder.decodes(byteBuffer);
 
             List<MessageExt> msgListFilterAgain = msgList;
+            //遍历subscriptionData的tag，进行过滤，所以消息的tag的过滤是在消费端进行过滤，浪费网络传输
+            //注意这里，可以用classFilterMode=false，来关闭tag的过滤
             if (!subscriptionData.getTagsSet().isEmpty() && !subscriptionData.isClassFilterMode()) {
                 msgListFilterAgain = new ArrayList<MessageExt>(msgList.size());
                 for (MessageExt msg : msgList) {
@@ -97,6 +102,7 @@ public class PullAPIWrapper {
 
             for (MessageExt msg : msgListFilterAgain) {
                 String traFlag = msg.getProperty(MessageConst.PROPERTY_TRANSACTION_PREPARED);
+                //如果是事务消息的化，设置消息的transactionId，这个transactionId是生产者那边传过来的
                 if (traFlag != null && Boolean.parseBoolean(traFlag)) {
                     msg.setTransactionId(msg.getProperty(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX));
                 }
@@ -141,12 +147,12 @@ public class PullAPIWrapper {
 
     /***
      * 消费者向broker发送拉取消息的请求
-     * @param mq 目标队列
+     * @param mq 目标队列，从哪个消息队列里拉取消息
      * @param subExpression 订阅表达式(包含topic和tag)
      * @param expressionType  指定subExpression的类型，默认是Tag
      * @param subVersion
-     * @param offset 发起拉取消息的请求，指定请求的开始offset
-     * @param maxNums  每次最多拉取数量
+     * @param offset 发起拉取消息的拉取偏移量
+     * @param maxNums  本次请求最大的拉取条数
      * @param sysFlag  指定拉取的消息的offset
      * @param commitOffset // 当前消息队列 commitlog日志中当前的最新偏移量（内存中）
      * @param brokerSuspendMaxTimeMillis

@@ -22,9 +22,11 @@ import org.apache.rocketmq.common.message.MessageQueue;
 public class PullRequest {
     //消费者组
     private String consumerGroup;
-    //待拉取消费队列
+    //待拉取消费队列（目标队列）
     private MessageQueue messageQueue;
     //消息处理队列，从broker拉取到的消息先存入ProcessQueue，然后再提交到消费者线程池消费
+    //ProcessQueue算是MessageQueue在消费端的重现、快照。PullMessageService每次从broker拉取默认的32条消息，并按照队列偏移量顺序存放在ProcessQueue
+    //PullMessageService然后会将消息提交到消费者消费线程池，当消费者成功消费完消息后，则从ProcessQueue中移除该消息
     private ProcessQueue processQueue;
     //待拉取的MessageQueue偏移量
     private long nextOffset;
