@@ -248,7 +248,7 @@ public abstract class RebalanceImpl {
     }
 
     /**
-     * 对主题重新分配队列
+     * 对主题重新分配队列，对于从broker更新到的新的queue的话，会为新的queue创建一个pullRequest请求
      * @param topic
      * @param isOrder
      */
