@@ -346,6 +346,12 @@ public abstract class RebalanceImpl {
         }
     }
 
+    /***
+     *
+     * 在更新broker队列的时候，如果出现队列变更，这个时候会为每个新的队列创建一个向broker拉取消息的pullRequest，
+     *      因为消费者在启动的时候，本地的缓存中队列信息初始为空，所以当获取broker上的队列元信息后，会为每一个ProccessQueue队列创建一个向broker拉取消息的pullRequest，这是消费者里最初的pullRequest的来源。
+     *          从这里我们可以发现，每个消息队列对应一个pullRequest
+     */
     private boolean updateProcessQueueTableInRebalance(final String topic, final Set<MessageQueue> mqSet,
         final boolean isOrder) {
         boolean changed = false;
@@ -383,7 +389,7 @@ public abstract class RebalanceImpl {
                 }
             }
         }
-// 增加 不在processQueueTable && 存在于mqSet 里的消息队列。
+// 增加 不在processQueueTable && 存在于mqSet 里的消息队列。如果发现队列信息变更，则会创建一次拉取相应队列的pullRequest
         List<PullRequest> pullRequestList = new ArrayList<PullRequest>();
         for (MessageQueue mq : mqSet) {
             if (!this.processQueueTable.containsKey(mq)) {
