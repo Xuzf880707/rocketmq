@@ -206,6 +206,14 @@ public class MappedFile extends ReferenceResource {
         return appendMessagesInner(messageExtBatch, cb);
     }
 
+    /***
+     *
+     * @param messageExt
+     * @param cb
+     * @return
+     * 开始写入消息，并传递回调函数。此时消息只是写入到buffer缓冲区
+     *
+     */
     public AppendMessageResult appendMessagesInner(final MessageExt messageExt, final AppendMessageCallback cb) {
         assert messageExt != null;
         assert cb != null;
@@ -213,13 +221,13 @@ public class MappedFile extends ReferenceResource {
         int currentPos = this.wrotePosition.get();
         //如果当前指针大于或等于文件大小，表示文件已写满
         if (currentPos < this.fileSize) {//当前文件还未写满
-            //slice()方法会返回一个新的buffer，但是新的bf2和源对象bf引用的是同一个。这里创建一个与MapperFile共享的内存区，
+            //slice()方法会返回一个新的buffer，但是新的byteBuffer和源对象byteBuffer引用的是同一个。这里创建一个与MapperFile共享的内存区，
             ByteBuffer byteBuffer = writeBuffer != null ? writeBuffer.slice() : this.mappedByteBuffer.slice();
             byteBuffer.position(currentPos);//设置这个共享区的当前指针
             AppendMessageResult result = null;
-            if (messageExt instanceof MessageExtBrokerInner) {
+            if (messageExt instanceof MessageExtBrokerInner) {//单条消息
                 result = cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, (MessageExtBrokerInner) messageExt);
-            } else if (messageExt instanceof MessageExtBatch) {
+            } else if (messageExt instanceof MessageExtBatch) {//批量消息
                 result = cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, (MessageExtBatch) messageExt);
             } else {
                 return new AppendMessageResult(AppendMessageStatus.UNKNOWN_ERROR);

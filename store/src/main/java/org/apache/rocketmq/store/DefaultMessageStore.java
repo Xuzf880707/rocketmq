@@ -68,7 +68,7 @@ public class DefaultMessageStore implements MessageStore {
     private final CommitLog commitLog;
     //消息队列存储缓存表，按消息主题分组
     private final ConcurrentMap<String/* topic */, ConcurrentMap<Integer/* queueId */, ConsumeQueue>> consumeQueueTable;
-    //消息队列文件ConsumerQueue刷盘线程
+    //消息队列文件ConsumerQueue的刷盘线程
     private final FlushConsumeQueueService flushConsumeQueueService;
     //清除CommitLog的服务
     private final CleanCommitLogService cleanCommitLogService;
@@ -78,11 +78,11 @@ public class DefaultMessageStore implements MessageStore {
     private final IndexService indexService;
         //MappedFile分配服务
     private final AllocateMappedFileService allocateMappedFileService;
-
+    //CommitLog消息分支，根据CommitLog文件构建ComsumeQueue、IndexFile文件
     private final ReputMessageService reputMessageService;
-
+    //存储HA机制的服务
     private final HAService haService;
-
+    //
     private final ScheduleMessageService scheduleMessageService;
 
     private final StoreStatsService storeStatsService;
@@ -95,15 +95,16 @@ public class DefaultMessageStore implements MessageStore {
     private final ScheduledExecutorService scheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("StoreScheduledThread"));
     private final BrokerStatsManager brokerStatsManager;
+
     private final MessageArrivingListener messageArrivingListener;
     private final BrokerConfig brokerConfig;
 
     private volatile boolean shutdown = true;
-
+    //文件刷盘检测点
     private StoreCheckpoint storeCheckpoint;
 
     private AtomicLong printTimes = new AtomicLong(0);
-
+    //CommitLog文件转发请求
     private final LinkedList<CommitLogDispatcher> dispatcherList;
 
     private RandomAccessFile lockFile;
@@ -312,11 +313,11 @@ public class DefaultMessageStore implements MessageStore {
      *
      * @param msg Message instance to store
      * @return
-     * 1、检查broker是否可写入，是否正常
-     * 2、检查topic的长度是超过256个字节
-     * 3、检查消息不能超过65536
-     * 4、检查os的pagecace是否过于忙碌
-     * 5、持久化到commitLog
+     * 1、消息校验：
+     *      检查目标broker为MASTER、broker是否可写、检查topic的长度是超过256个字节、检查消息不能超过65536
+     * 2、检查os的pagecace是否过于忙碌、放缓写入节奏
+     * 3、将持久化到commitLog
+     * 4、记录本次持久化消息的耗时
      */
     public PutMessageResult putMessage(MessageExtBrokerInner msg) {
         if (this.shutdown) {

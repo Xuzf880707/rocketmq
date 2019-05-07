@@ -53,6 +53,9 @@ import java.net.SocketAddress;
 import java.util.List;
 import java.util.Map;
 
+/***
+ * 接收生产者发送过来的消息
+ */
 public class SendMessageProcessor extends AbstractSendMessageProcessor implements NettyRequestProcessor {
 
     private List<ConsumeMessageHook> consumeMessageHookList;
@@ -62,21 +65,23 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
     }
 
     /***
-     * 处理请求
+     * 处理请求:本质是交给messageStore来存储
      * @param ctx
      * @param request
      * @return
      * @throws RemotingCommandException
      * 1、获得请求消息头
      * 2、可在broker端通过配置SendMessageHook来做一些日志相关的记录
-     * 3、发送消息，批量和单条的分别走不同的分支
+     * 3、发送消息，根据request.code来决定走不同分支进行存储：
+     *      CONSUMER_SEND_MSG_BACK：产生该消息的原因可能是由于消费者未及时消费或消费失败后，把消息返回给broker。对于这类消息会被加入延迟队列，交给定时任务来定时推送。
+     *      生产者生产的消息：根据请求消息头中的batch标记，分为批量和单条消息。
      */
     @Override
     public RemotingCommand processRequest(ChannelHandlerContext ctx,
                                           RemotingCommand request) throws RemotingCommandException {
         SendMessageContext mqtraceContext;
         switch (request.getCode()) {
-            //如果是由消费者发送返回的消息，则走该分支
+            //如果是由消费者发送返回的消息，则走重试队列的分支
             case RequestCode.CONSUMER_SEND_MSG_BACK:
                 return this.consumerSendMsgBack(ctx, request);
             default:
@@ -107,6 +112,24 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             this.brokerController.getMessageStore().isTransientStorePoolDeficient();
     }
 
+    /***
+     * 针对消费者消费失败返回的请求
+     * @param ctx
+     * @param request
+     * @return
+     * @throws RemotingCommandException
+     *  该方法主要是针对消费端返回未被成功消费的消息，该消息会被加入重试队列
+     * 1、创建响应命令
+     * 2、解析请求头并校验：
+     *      如果消息id不为空，则表示是消费者未成功消费返回的消息、查找验证组配置信息、检查broker是否有写权限、检查组对应的broker端中的重试队列配置数量必须大于0
+     * 3、根据组名和组配置中配置的重试队列数配置创建retry topic,重试topic的对列数在group中配置(如果本地缓存里有的话，则直接返回）
+     * 4、根据消息的offset，判断commitLog里是否还保存了该条消息(有可能被定时清除)
+     * 5、根据延迟等级和最大的重试次数，决定消息是否需要加入死信队列的主题。否则则更新延迟等级并存放到相应的延迟队列里.(这一步如果没有死信队列的话，会新建一个死信队列)
+     * 6、将重试消费的消息更新延迟等级后，持久化到commitLog，将索引写到SCHEDULE_TOPIC_XXXX队列。
+     * 7、注意：commitLog在putMessage时，会根据延迟等级delayTimeLevel>0这个条件，修改当前消息的topic为SCHEDULE_TOPIC_XXXX。原先的retry topic会保留到property中。
+     *      最终不同的group的重试消息都会最终被写入到同一个定时任务的主题：SCHEDULE_TOPIC_XXXX，而且会被存放到不同的延迟等级对应SCHEDULE_TOPIC_XXXX不同的queueId。
+     *      在ScheduleMessageService里面会判断消息满足条件后，把消息的topic通过property中的topic更新为真实的retry topic，通常是%RETRY%consumerGroup，然后写到consumeQueue。
+     */
     private RemotingCommand consumerSendMsgBack(final ChannelHandlerContext ctx, final RemotingCommand request)
         throws RemotingCommandException {
         final RemotingCommand response = RemotingCommand.createResponseCommand(null);
@@ -124,7 +147,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
 
             this.executeConsumeMessageHookAfter(context);
         }
-
+        //从broker获得该消费失败的消息所属的订阅组group的配置信息
         SubscriptionGroupConfig subscriptionGroupConfig =
             this.brokerController.getSubscriptionGroupManager().findSubscriptionGroupConfig(requestHeader.getGroup());
         if (null == subscriptionGroupConfig) {
@@ -139,21 +162,22 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             response.setRemark("the broker[" + this.brokerController.getBrokerConfig().getBrokerIP1() + "] sending message is forbidden");
             return response;
         }
-
+        //如果组对应的配置重试队列数量<=0
         if (subscriptionGroupConfig.getRetryQueueNums() <= 0) {
             response.setCode(ResponseCode.SUCCESS);
             response.setRemark(null);
             return response;
         }
-
+        //根据组名获得重试的topic
         String newTopic = MixAll.getRetryTopic(requestHeader.getGroup());
+        //获得组配置信息中配置的重试队列个数，从这里我们可以看到retry topic有多少个队列是根据集群组来配置的
         int queueIdInt = Math.abs(this.random.nextInt() % 99999999) % subscriptionGroupConfig.getRetryQueueNums();
 
         int topicSysFlag = 0;
         if (requestHeader.isUnitMode()) {
             topicSysFlag = TopicSysFlag.buildSysFlag(false, true);
         }
-
+        //根据重试topic和重试队列数配置创建retry topic（如果本地缓存里有的话，则直接返回）
         TopicConfig topicConfig = this.brokerController.getTopicConfigManager().createTopicInSendMessageBackMethod(
             newTopic,
             subscriptionGroupConfig.getRetryQueueNums(),
@@ -169,27 +193,28 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             response.setRemark(String.format("the topic[%s] sending message is forbidden", newTopic));
             return response;
         }
-
+        //根据消息的offset，判断commitLog里是否还保存了该条消息(有可能被定时清除)
         MessageExt msgExt = this.brokerController.getMessageStore().lookMessageByOffset(requestHeader.getOffset());
         if (null == msgExt) {
             response.setCode(ResponseCode.SYSTEM_ERROR);
             response.setRemark("look message by offset failed, " + requestHeader.getOffset());
             return response;
         }
-
+        //设置msgExt的额外信息：RETRY_TOPIC=retry topic名
         final String retryTopic = msgExt.getProperty(MessageConst.PROPERTY_RETRY_TOPIC);
         if (null == retryTopic) {
             MessageAccessor.putProperty(msgExt, MessageConst.PROPERTY_RETRY_TOPIC, msgExt.getTopic());
         }
+        //设置消息为不等待消息返回
         msgExt.setWaitStoreMsgOK(false);
-
+        //获得重新消费的延迟等级
         int delayLevel = requestHeader.getDelayLevel();
-
+        //获得消息的最大重试次数
         int maxReconsumeTimes = subscriptionGroupConfig.getRetryMaxTimes();
         if (request.getVersion() >= MQVersion.Version.V3_4_9.ordinal()) {
             maxReconsumeTimes = requestHeader.getMaxReconsumeTimes();
         }
-
+        //如果重试次数大于最大的重试次数，或者延迟等级<0,则放入死信队列
         if (msgExt.getReconsumeTimes() >= maxReconsumeTimes
             || delayLevel < 0) {
             newTopic = MixAll.getDLQTopic(requestHeader.getGroup());
@@ -204,11 +229,12 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 response.setRemark("topic[" + newTopic + "] not exist");
                 return response;
             }
-        } else {
+        } else {//更新消息的延迟等级
+            //第一次重试默认consumer发回为0，延迟为延迟等级为0+3=3
             if (0 == delayLevel) {
                 delayLevel = 3 + msgExt.getReconsumeTimes();
             }
-
+            //如果第一次不为0表明是consumer控制的情况，直接取出delayTimeLevel，也就是和ConsumeConcurrentlyContext（consumer端控制）的delayLevelWhenNextConsume配置一致
             msgExt.setDelayTimeLevel(delayLevel);
         }
 
@@ -229,17 +255,18 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
 
         String originMsgId = MessageAccessor.getOriginMessageId(msgExt);
         MessageAccessor.setOriginMessageId(msgInner, UtilAll.isBlank(originMsgId) ? msgExt.getMsgId() : originMsgId);
-
+        //将重试消息写入到commitLog和重试队列的consumeQueue中，
+        //当消息重试发送后，会根据延迟等级，不同的group的重试消息都会最终被写入到定时任务的主题：SCHEDULE_TOPIC_XXXX，不同的延迟等级对应SCHEDULE_TOPIC_XXXX不同的queueId
         PutMessageResult putMessageResult = this.brokerController.getMessageStore().putMessage(msgInner);
         if (putMessageResult != null) {
             switch (putMessageResult.getPutMessageStatus()) {
                 case PUT_OK:
-                    String backTopic = msgExt.getTopic();
-                    String correctTopic = msgExt.getProperty(MessageConst.PROPERTY_RETRY_TOPIC);
+                    String backTopic = msgExt.getTopic();//返回消息消费主题
+                    String correctTopic = msgExt.getProperty(MessageConst.PROPERTY_RETRY_TOPIC);//返回消息的重试主题
                     if (correctTopic != null) {
                         backTopic = correctTopic;
                     }
-
+                    //更新重试次数
                     this.brokerController.getBrokerStatsManager().incSendBackNums(requestHeader.getGroup(), backTopic);
 
                     response.setCode(ResponseCode.SUCCESS);

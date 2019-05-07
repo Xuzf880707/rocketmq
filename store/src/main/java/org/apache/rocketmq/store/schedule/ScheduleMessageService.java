@@ -81,6 +81,7 @@ public class ScheduleMessageService extends ConfigManager {
             Entry<Integer, Long> next = it.next();
             int queueId = delayLevel2QueueId(next.getKey());
             long delayOffset = next.getValue();
+            //查找SCHEDULE_TOPIC_XXXX中指定的延迟等级(queueId)中最大的偏移量
             long maxOffset = this.defaultMessageStore.getMaxOffsetInQueue(SCHEDULE_TOPIC, queueId);
             String value = String.format("%d,%d", delayOffset, maxOffset);
             String key = String.format("%s_%d", RunningStats.scheduleMessageOffset.name(), next.getKey());
@@ -211,6 +212,9 @@ public class ScheduleMessageService extends ConfigManager {
             this.offset = offset;
         }
 
+        /***
+         * 为每一个延迟等级启动一个线程，定时扫描SCHEDULE_TOPIC中指定的队列queue
+         */
         @Override
         public void run() {
             try {
@@ -238,7 +242,14 @@ public class ScheduleMessageService extends ConfigManager {
             return result;
         }
 
+        /***
+         * 定时执行指定延迟等级中等待的任务
+         * 1、根据延迟等级查找SCHEDULE_TOPIC中对应的ConsumeQueue。
+         * 2、获取上一次定时任务的offset，并根据offset定位到ConsumeQueue中对应的目标MappedFile中：从开始位置offset到末尾的buffer缓冲区
+         * 3、遍历由步骤2中截取出来的buffer，每次跳跃20个字节，并根据offsetPy定位消息在commitLog中的物理位置。
+         */
         public void executeOnTimeup() {
+            //根据延迟等级找出SCHEDULE_TOPIC中对应的延迟队列
             ConsumeQueue cq =
                 ScheduleMessageService.this.defaultMessageStore.findConsumeQueue(SCHEDULE_TOPIC,
                     delayLevel2QueueId(delayLevel));
@@ -246,18 +257,20 @@ public class ScheduleMessageService extends ConfigManager {
             long failScheduleOffset = offset;
 
             if (cq != null) {
+                //根据
                 SelectMappedBufferResult bufferCQ = cq.getIndexBuffer(this.offset);
                 if (bufferCQ != null) {
                     try {
                         long nextOffset = offset;
                         int i = 0;
+                        //遍历定位到buffer
                         ConsumeQueueExt.CqExtUnit cqExtUnit = new ConsumeQueueExt.CqExtUnit();
                         for (; i < bufferCQ.getSize(); i += ConsumeQueue.CQ_STORE_UNIT_SIZE) {
                             long offsetPy = bufferCQ.getByteBuffer().getLong();
                             int sizePy = bufferCQ.getByteBuffer().getInt();
                             long tagsCode = bufferCQ.getByteBuffer().getLong();
 
-                            if (cq.isExtAddr(tagsCode)) {
+                            if (cq.isExtAddr(tagsCode)) {//肯定返回true
                                 if (cq.getExt(tagsCode, cqExtUnit)) {
                                     tagsCode = cqExtUnit.getTagsCode();
                                 } else {
@@ -268,7 +281,7 @@ public class ScheduleMessageService extends ConfigManager {
                                     tagsCode = computeDeliverTimestamp(delayLevel, msgStoreTime);
                                 }
                             }
-
+                            //获得当前时间
                             long now = System.currentTimeMillis();
                             long deliverTimestamp = this.correctDeliverTimestamp(now, tagsCode);
 

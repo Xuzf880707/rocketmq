@@ -226,6 +226,15 @@ public class TopicConfigManager extends ConfigManager {
         return topicConfig;
     }
 
+    /***
+     *
+     * @param topic 根据组名命名的retry topic的名称
+     * @param clientDefaultTopicQueueNums topic对应的对列个数
+     * @param perm 队列的权限
+     * @param topicSysFlag
+     * @return
+     * 检查本地缓存topicConfigTable是否已创建过该retry topic，有则直接返回，保证不会重复创建；没有的话就新建一个
+     */
     public TopicConfig createTopicInSendMessageBackMethod(
         final String topic,
         final int clientDefaultTopicQueueNums,
