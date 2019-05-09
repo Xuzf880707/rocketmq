@@ -637,7 +637,7 @@ public class CommitLog {
             switch (result.getStatus()) {
                 case PUT_OK:
                     break;
-                case END_OF_FILE://表示剩余空间不够，需要重新创建一个新的mappedFile文件
+                case END_OF_FILE://表示剩余空间不够，需要重新创建一个新的mappedFile文件，并重新写入
                     unlockMappedFile = mappedFile;
                     // Create a new file, re-write the message
                     mappedFile = this.mappedFileQueue.getLastMappedFile(0);

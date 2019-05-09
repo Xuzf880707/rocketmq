@@ -26,15 +26,17 @@ public interface AppendMessageCallback {
 
     /**
      * After message serialization, write MapedByteBuffer
-     *
+     *  处理一条消息，写入commitLog，返回结果
      * @return How many bytes to write
+     *      fileFromOffset是mappedFile文件名，一般为long型，20位数字
+     *     maxBlank是文件剩余可用空间
      */
     AppendMessageResult doAppend(final long fileFromOffset, final ByteBuffer byteBuffer,
         final int maxBlank, final MessageExtBrokerInner msg);
 
     /**
      * After batched message serialization, write MapedByteBuffer
-     *
+     * 处理一批消息，写入commitLog，返回结果
      * @param messageExtBatch, backed up by a byte array
      * @return How many bytes to write
      */

@@ -75,6 +75,11 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
      * 3、发送消息，根据request.code来决定走不同分支进行存储：
      *      CONSUMER_SEND_MSG_BACK：产生该消息的原因可能是由于消费者未及时消费或消费失败后，把消息返回给broker。对于这类消息会被加入延迟队列，交给定时任务来定时推送。
      *      生产者生产的消息：根据请求消息头中的batch标记，分为批量和单条消息。
+     *
+     * 比较事务消息、消费失败的重试消息、普通消息
+     *      prepared事务消息：消息拓展属性里包含了原始topic和comsumeQueue的queueId。重置了队列和topic,topic:RMQ_SYS_TRANS_HALF_TOPIC和queueId:0
+     *      消费失败的重试消息：消息拓展属性里包含了原始topic和comsumeQueue的queueId。重置了队列和topic：SCHEDULE_TOPIC_XXXX 和queuedId:延迟等级
+     *      普通消息：不会修改原始的topic和consumeQueue的id。
      */
     @Override
     public RemotingCommand processRequest(ChannelHandlerContext ctx,
@@ -288,23 +293,25 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
     }
 
     /***
-     * 处理发往重试队列和死信队列的消息
+     * 判断是否该发往重试队列或死信队列
      * @param requestHeader
      * @param response
      * @param request
      * @param msg
      * @param topicConfig
      * @return
+     * 1、检查重试队列的组名是否存在
+     * 2、判断是否重试次数过多，是否加入死信队列
      */
     private boolean handleRetryAndDLQ(SendMessageRequestHeader requestHeader, RemotingCommand response,
                                       RemotingCommand request,
                                       MessageExt msg, TopicConfig topicConfig) {
         String newTopic = requestHeader.getTopic();
         if (null != newTopic && newTopic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {//如果是发往重试主题
-            String groupName = newTopic.substring(MixAll.RETRY_GROUP_TOPIC_PREFIX.length());//后的重试队列所属的组
+            String groupName = newTopic.substring(MixAll.RETRY_GROUP_TOPIC_PREFIX.length());//从主题topic中抽离出组名groupName
             SubscriptionGroupConfig subscriptionGroupConfig =
-                this.brokerController.getSubscriptionGroupManager().findSubscriptionGroupConfig(groupName);
-            if (null == subscriptionGroupConfig) {
+                this.brokerController.getSubscriptionGroupManager().findSubscriptionGroupConfig(groupName);//查找组名的订阅消息
+            if (null == subscriptionGroupConfig) {//如果未有该组对应的订阅消息，则返回false
                 response.setCode(ResponseCode.SUBSCRIPTION_GROUP_NOT_EXIST);
                 response.setRemark(
                     "subscription group not exist, " + groupName + " " + FAQUrl.suggestTodo(FAQUrl.SUBSCRIPTION_GROUP_NOT_EXIST));
@@ -354,13 +361,15 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
      */
     /***
      *
-     *1、初始化创建响应command
+     * 1、初始化创建响应command
      * 2、检查当前broker是否可以开始接收消息
      * 3、校验消息的合法性：
-     * 4、对于重试消息或者重试超过次数的死信消息，重定向消息的目标主题。
-     * 5、对于事务消息，检查broker是否支持事务消息。
-     * 5、调用DefaultMessageStore.putMessage持久化消息。
-     *      注意，如果是事务消息的话，调用TransactionalMessageServiceImpl.prepareMessage来持久化消息
+     * 4、检查消息是否重试消息或者重试超过次数进入死信的消息，重定向消息的目标主题。
+     * 5、对于事务消息，检查broker是否支持事务消息。对于支持事务消息的broker,会把消息交给TransactionalMessageServiceImpl.prepareMessage来持久化
+     *       和普通消息存储相比:
+     *             主要是添加了几个拓展属性：REAL_TOPIC、REAL_QID
+     *             重置了队列和主体：RMQ_SYS_TRANS_HALF_TOPIC和queueId=0
+     * 6、调用DefaultMessageStore.putMessage持久化消息。
      */
     private RemotingCommand sendMessage(final ChannelHandlerContext ctx,
                                         final RemotingCommand request,
@@ -371,12 +380,12 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         final SendMessageResponseHeader responseHeader = (SendMessageResponseHeader)response.readCustomHeader();
 
         response.setOpaque(request.getOpaque());
-        //像响应信息里添加额外信息：当前所属broker和师傅需要追踪
+        //向响应信息里添加额外信息：当前所属broker和是否需要进行日志追踪
         response.addExtField(MessageConst.PROPERTY_MSG_REGION, this.brokerController.getBrokerConfig().getRegionId());
         response.addExtField(MessageConst.PROPERTY_TRACE_SWITCH, String.valueOf(this.brokerController.getBrokerConfig().isTraceOn()));
 
         log.debug("receive SendMessage request command, {}", request);
-        //获取broker端配置的开始接收消息的时间
+        //获取broker端配置的开始接收消息的时间，默认为0  表示没有配置
         final long startTimstamp = this.brokerController.getBrokerConfig().getStartAcceptSendRequestTimeStamp();
         //如果还没到开始接收消息的时间，则直接拒绝返回错误
         if (this.brokerController.getMessageStore().now() < startTimstamp) {
@@ -395,7 +404,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         final byte[] body = request.getBody();
 
         int queueIdInt = requestHeader.getQueueId();//获得目标队列id
-
+        //根据topic获得broker端的topicConfig
         TopicConfig topicConfig = this.brokerController.getTopicConfigManager().selectTopicConfig(requestHeader.getTopic());
 
         if (queueIdInt < 0) {
@@ -405,11 +414,11 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         MessageExtBrokerInner msgInner = new MessageExtBrokerInner();
         msgInner.setTopic(requestHeader.getTopic());
         msgInner.setQueueId(queueIdInt);
-        //重新根据重试信息来判断是发往重试队列还是死信队列
+        //判断消息是否该存入重试队列或死信队列，如果是的话则直接返回response
         if (!handleRetryAndDLQ(requestHeader, response, request, msgInner, topicConfig)) {
             return response;
         }
-
+        //进入正常消息存储
         msgInner.setBody(body);
         msgInner.setFlag(requestHeader.getFlag());
         MessageAccessor.setProperties(msgInner, MessageDecoder.string2messageProperties(requestHeader.getProperties()));
@@ -420,8 +429,9 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         msgInner.setReconsumeTimes(requestHeader.getReconsumeTimes() == null ? 0 : requestHeader.getReconsumeTimes());
         PutMessageResult putMessageResult = null;
         Map<String, String> oriProps = MessageDecoder.string2messageProperties(requestHeader.getProperties());
+        //判断消息是否是 prepared事务消息
         String traFlag = oriProps.get(MessageConst.PROPERTY_TRANSACTION_PREPARED);
-        if (traFlag != null && Boolean.parseBoolean(traFlag)) {//如果是事务状态为prepared状态的消息
+        if (traFlag != null && Boolean.parseBoolean(traFlag)) {//如果是事务状态为prepared状态的消息，如果broker本身配置为拒绝事务消息，则直接拒绝消息写入
             if (this.brokerController.getBrokerConfig().isRejectTransactionMessage()) {//如果broker本身拒绝事务消息，则直接拒绝消息写入
                 response.setCode(ResponseCode.NO_PERMISSION);
                 response.setRemark(
@@ -429,8 +439,12 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                         + "] sending transaction message is forbidden");
                 return response;
             }
+            //如果broker允许接收事务消息存储，则交给TransactionalMessageService进行存储消息  TransactionalMessageBridge
+            //和普通消息存储相比:
+            //      主要是添加了几个拓展属性：REAL_TOPIC、REAL_QID
+            //      重置了队列和主体：RMQ_SYS_TRANS_HALF_TOPIC和queueId=0
             putMessageResult = this.brokerController.getTransactionalMessageService().prepareMessage(msgInner);
-        } else {
+        } else {//非事务消息存储
             putMessageResult = this.brokerController.getMessageStore().putMessage(msgInner);
         }
 
@@ -507,9 +521,12 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             this.brokerController.getBrokerStatsManager().incBrokerPutNums(putMessageResult.getAppendMessageResult().getMsgNum());
 
             response.setRemark(null);
-
+            //响应头
+            //MsgId：消息id
             responseHeader.setMsgId(putMessageResult.getAppendMessageResult().getMsgId());
+            //QueueId：consumeQueue的id
             responseHeader.setQueueId(queueIdInt);
+            //queueOffset: consumeQueue中的offset，递增➕1
             responseHeader.setQueueOffset(putMessageResult.getAppendMessageResult().getLogicsOffset());
 
             doResponse(ctx, request, response);
