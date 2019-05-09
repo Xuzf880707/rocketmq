@@ -195,20 +195,26 @@ public class MappedFileQueue {
         return 0;
     }
 
+    /**
+     * 1、获得最新的 MappedFile，如果第一次创建的话，该对象返回空
+     */
     public MappedFile getLastMappedFile(final long startOffset, boolean needCreate) {
         long createOffset = -1;
         MappedFile mappedFileLast = getLastMappedFile();//获得最新的MappedFile
 
-        if (mappedFileLast == null) {//如果是新建的第一个MappedFile
+        if (mappedFileLast == null) {//如果是新建的第一个MappedFile（也有可能之前的MappedFile超期被清除了）
+            // 开始offset  = 100-(100/30)=90，这个90就是第三页的起始offset
             createOffset = startOffset - (startOffset % this.mappedFileSize);
         }
-
+        //如果最后一个MappedFile已经写满，计算下一个MappedFile的起始offset
         if (mappedFileLast != null && mappedFileLast.isFull()) {
             createOffset = mappedFileLast.getFileFromOffset() + this.mappedFileSize;
         }
-
+        //如果createOffset != -1且需要创建一个新的MappedFile
         if (createOffset != -1 && needCreate) {
+            //定义下一个文件的名称，已开始offset为名称
             String nextFilePath = this.storePath + File.separator + UtilAll.offset2FileName(createOffset);
+            //设置下下个MappedFile名称
             String nextNextFilePath = this.storePath + File.separator
                 + UtilAll.offset2FileName(createOffset + this.mappedFileSize);
             MappedFile mappedFile = null;

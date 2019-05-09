@@ -569,7 +569,9 @@ public class CommitLog {
      * 1、记录消息存储时间，计算消息校验和。
      * 2、根据延迟等级delayTimeLevel>0这个条件，修改当前消息的topic为SCHEDULE_TOPIC_XXXX。原先的retry topic会保留到property中。
      *      所以消息会被推送到
-     * 3、从commitLog目录里获取最新的commitLog文件进行加锁，如果最新的commitLog写满了，则会新建一个新的commitLog
+     * 3、记录存储时间、获得最新的commitLog，如果commitLog满了的话，则新建一个commitLog
+     *
+     *
      */
     public PutMessageResult putMessage(final MessageExtBrokerInner msg) {
         // Set the storage time  设置消息存储的时间

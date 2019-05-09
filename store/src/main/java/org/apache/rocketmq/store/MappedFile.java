@@ -149,7 +149,7 @@ public class MappedFile extends ReferenceResource {
     public static long getTotalMappedVirtualMemory() {
         return TOTAL_MAPPED_VIRTUAL_MEMORY.get();
     }
-
+    //从transientStorePool中弹出一个预创建的buffer，并赋给writeBuffer
     public void init(final String fileName, final int fileSize,
         final TransientStorePool transientStorePool) throws IOException {
         init(fileName, fileSize);

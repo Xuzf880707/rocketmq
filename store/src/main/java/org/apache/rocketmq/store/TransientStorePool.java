@@ -45,6 +45,7 @@ public class TransientStorePool {
 
     /**
      * It's a heavy init method.
+     * TransientStorePool存储池会预先分配poolSize个缓存块，固定不变，如果被拿走一个则减少一个，返回一个则增加一个
      */
     public void init() {
         for (int i = 0; i < poolSize; i++) {
@@ -66,6 +67,9 @@ public class TransientStorePool {
         }
     }
 
+    /***
+     * 如果该固定缓存块被返回，则可用的总的缓存块加1
+     */
     public void returnBuffer(ByteBuffer byteBuffer) {
         byteBuffer.position(0);
         byteBuffer.limit(fileSize);
