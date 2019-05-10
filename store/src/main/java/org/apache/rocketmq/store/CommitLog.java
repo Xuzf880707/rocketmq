@@ -569,10 +569,12 @@ public class CommitLog {
      * 1、记录消息存储时间，计算消息校验和。
      * 2、检查消息发送类型，对于普通消息或者commit类型的消息:如果延迟等级delayTimeLevel>0，则将会修改原始目标topic和queueId。同时将old topic和queueId,会暂存到拓展属性中。
      *      所有的延迟消息都会被发送到：SCHEDULE_TOPIC_XXXX，queueId=delayTimeLevel-1
-     * 3、获取最后一个MappedFile:
+     * 3、获取最后一个MappedFile并写入消息:
      *      last mappedFile已满，则会创建一个新的MappedFile，并继续写入
      *      last mappedFile未满，则直接以追加的方式追加到MappedFile
+     * 4、将commitLog中缓冲区的消息刷盘落到磁盘
      *
+     * 5、进行主从备份
      */
     public PutMessageResult putMessage(final MessageExtBrokerInner msg) {
         // Set the storage time  设置消息存储的时间
@@ -681,7 +683,7 @@ public class CommitLog {
 
         PutMessageResult putMessageResult = new PutMessageResult(PutMessageStatus.PUT_OK, result);
 
-        // 更新
+        // 更新统计信息
         storeStatsService.getSinglePutMessageTopicTimesTotal(msg.getTopic()).incrementAndGet();
         storeStatsService.getSinglePutMessageTopicSizeTotal(topic).addAndGet(result.getWroteBytes());
         //将commit内存中的消息刷盘落地
@@ -724,11 +726,13 @@ public class CommitLog {
                 service.wakeup();
             }
         }
-        // Asynchronous flush
+        // 如果是异步刷盘的话，
         else {
             if (!this.defaultMessageStore.getMessageStoreConfig().isTransientStorePoolEnable()) {
+                //唤醒FlushRealTimeService线程后直接返回，不等待FlushRealTimeService线程刷盘完成。
                 flushCommitLogService.wakeup();
             } else {
+                //唤醒CommitRealTimeService后直接返回，不等待CommitRealTimeService线程刷盘完成。
                 commitLogService.wakeup();
             }
         }
@@ -1175,8 +1179,10 @@ public class CommitLog {
         //将刷盘请求放到requestsWrite队列中，并唤醒等待线程
 
         /***
-         * 将要刷盘的额消息添加到requestsWrite集合里，并唤醒正在等待的线程。进而调用doCommit
+         *
          * @param request
+         * 1、将要刷盘的请求添加到requestsWrite集合里，
+         * 2、唤醒正在等待的GroupCommitService线程。进而继续执行doCommit
          */
         public synchronized void putRequest(final GroupCommitRequest request) {
             synchronized (this.requestsWrite) {
@@ -1194,6 +1200,12 @@ public class CommitLog {
             this.requestsRead = tmp;
         }
 
+        /***
+         * 1、判断requestsRead不为空(注意，requestsRead通过swapRequests置换后，里面保存的实际上是待刷盘的请求了)
+         * 2、依次从 requestsRead 读取待刷盘的请求，并刷到磁盘。
+         * 3、调用GroupCommitRequest.countDownLatch.countDown()来唤醒调用putRequest后等待于GroupCommitRequest上的线程，同时设置flushOK。
+         * 4、清除已处理的requestsRead集合。
+         */
         private void doCommit() {
             //队列可以保证顺序，开始加锁requestsRead，因为requestsRead里是requestsWrite置换过来的，也就是说，这个requestsRead放的就是刷盘的请求，这样做不会影响到其它生产者继续对 requestsWrite进行写
             synchronized (this.requestsRead) {
