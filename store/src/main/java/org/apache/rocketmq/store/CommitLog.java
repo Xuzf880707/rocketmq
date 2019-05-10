@@ -567,10 +567,11 @@ public class CommitLog {
     /***
      * 消息持久化
      * 1、记录消息存储时间，计算消息校验和。
-     * 2、根据延迟等级delayTimeLevel>0这个条件，修改当前消息的topic为SCHEDULE_TOPIC_XXXX。原先的retry topic会保留到property中。
-     *      所以消息会被推送到
-     * 3、记录存储时间、获得最新的commitLog，如果commitLog满了的话，则新建一个commitLog
-     *
+     * 2、检查消息发送类型，对于普通消息或者commit类型的消息:如果延迟等级delayTimeLevel>0，则将会修改原始目标topic和queueId。同时将old topic和queueId,会暂存到拓展属性中。
+     *      所有的延迟消息都会被发送到：SCHEDULE_TOPIC_XXXX，queueId=delayTimeLevel-1
+     * 3、获取最后一个MappedFile:
+     *      last mappedFile已满，则会创建一个新的MappedFile，并继续写入
+     *      last mappedFile未满，则直接以追加的方式追加到MappedFile
      *
      */
     public PutMessageResult putMessage(final MessageExtBrokerInner msg) {
@@ -583,9 +584,9 @@ public class CommitLog {
         AppendMessageResult result = null;
 
         StoreStatsService storeStatsService = this.defaultMessageStore.getStoreStatsService();
-        //获得消息目标主题
+        //获得目标主题
         String topic = msg.getTopic();
-        //获得消息目标队列id
+        //获得目标队列id
         int queueId = msg.getQueueId();
         //获得消息事务类型
         final int tranType = MessageSysFlag.getTransactionValue(msg.getSysFlag());
@@ -594,10 +595,11 @@ public class CommitLog {
             || tranType == MessageSysFlag.TRANSACTION_COMMIT_TYPE) {
             // Delay Delivery  判断是否延迟发送
             if (msg.getDelayTimeLevel() > 0) {
+                //判断延迟等级是否超过了broker限制的最大的延迟等级
                 if (msg.getDelayTimeLevel() > this.defaultMessageStore.getScheduleMessageService().getMaxDelayLevel()) {
                     msg.setDelayTimeLevel(this.defaultMessageStore.getScheduleMessageService().getMaxDelayLevel());
                 }
-                //固定topic: SCHEDULE_TOPIC_XXXX
+                //修改topic: SCHEDULE_TOPIC_XXXX
                 topic = ScheduleMessageService.SCHEDULE_TOPIC;
                 //根据延迟等级从SCHEDULE_TOPIC_XXXX获得队列queueId（所以每一个延迟等级都对应一个独立的queue，不同的组的共享延迟主题:SCHEDULE_TOPIC_XXXX）
                 queueId = ScheduleMessageService.delayLevel2QueueId(msg.getDelayTimeLevel());
@@ -641,7 +643,7 @@ public class CommitLog {
                     break;
                 case END_OF_FILE://表示剩余空间不够，需要重新创建一个新的mappedFile文件，并重新写入
                     unlockMappedFile = mappedFile;
-                    // Create a new file, re-write the message
+                    // 空间不足则申请一个最新的mappedFile并返回
                     mappedFile = this.mappedFileQueue.getLastMappedFile(0);
                     if (null == mappedFile) {
                         // XXX: warn and notify me

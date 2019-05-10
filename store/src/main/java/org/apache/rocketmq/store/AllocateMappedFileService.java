@@ -55,6 +55,12 @@ public class AllocateMappedFileService extends ServiceThread {
      * @param nextNextFilePath 下下个新的 MappedFile 的名称
      * @param fileSize 每个 MappedFile 的大小
      * @return
+     * 1、判断是否采用缓冲池：开启缓冲区池功能&&Master。如果开启缓冲池的功能，则根据池里剩余的缓冲buffer块来控制创建mappedFile的请求。
+     *      如果采用缓冲池功能，且缓冲池的buffer块不够，则拒绝此次发起的创建MappedFile的请求，并直接返回。
+     * 2、尝试向 ConcurrentHashMap 中存放 nextReq ，如果存放失败说明有别的线程已经创建文件，所以拒绝当前mappedFile的创建请求，并尝试另一个MappedFile的创建
+     * 3、将待创建mappedFile的请求放入requestQueue队列。(该动作会触发AllocateMappedFileService本身从队列requestQueue出take出创建MappedFile的请求：AllocateRequest)
+     * 4、当前线程超时等待AllocateRequest执行完成(AllocateMappedFileServic线程会不断的从equestQueue里获取弹出AllocateRequest进行执行，执行完成后会唤醒等待于当前AllocateReques的线程)
+     * 5、MappedFile创建完成，则从requestTable移除该AllocateRequest请求。所以requestTable是用来维护未处理的AllocateRequest
      */
     public MappedFile putRequestAndReturnMappedFile(String nextFilePath, String nextNextFilePath, int fileSize) {
         int canSubmitRequests = 2;//默认可以提交2个请求

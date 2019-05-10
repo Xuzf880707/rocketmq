@@ -195,8 +195,19 @@ public class MappedFileQueue {
         return 0;
     }
 
-    /**
-     * 1、获得最新的 MappedFile，如果第一次创建的话，该对象返回空
+    /***
+     *
+     * @param startOffset 待新建的MappedFile起始offset(这个offset是针对整个commitLog的)
+     * @param needCreate 是否新建一个新的MappedFile
+     * @return
+     * 1、返回或新建最新的MappedFile，并计算待创建的mappedFile的起始offset
+     *      如果返回空（目录下没有任何MappedFile,），有两种原因：a、mappedFile都被清理 b、第一次创建。故这边，要通过createOffset = startOffset - (startOffset % this.mappedFileSize);来计算待新建的MappedFile的开始offset。
+     *      如果不回空，则目录下已有MappedFile，则需要判断最新的mappedFile是否已写满。如果已写满，则待新建的mappedFile的开始offset：最新的mappedFile的起始offset+ mappedFileSize（这是依赖于每个mappedFile的大小是固定为：mappedFileSize）
+     * 2、根据计算好的待创建的mappedFile的起始offset创建一个最新的MappedFile:
+     *      定义下一个mappedFile和下下一个mappedFile的名称。
+     *      申请创建mappedFile
+     *      更新该commitLog下已创建的MappedFile对象
+     *
      */
     public MappedFile getLastMappedFile(final long startOffset, boolean needCreate) {
         long createOffset = -1;
@@ -210,7 +221,7 @@ public class MappedFileQueue {
         if (mappedFileLast != null && mappedFileLast.isFull()) {
             createOffset = mappedFileLast.getFileFromOffset() + this.mappedFileSize;
         }
-        //如果createOffset != -1且需要创建一个新的MappedFile
+        //如果是新建一个mappedFile
         if (createOffset != -1 && needCreate) {
             //定义下一个文件的名称，已开始offset为名称
             String nextFilePath = this.storePath + File.separator + UtilAll.offset2FileName(createOffset);

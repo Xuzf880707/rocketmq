@@ -198,6 +198,12 @@ public class MappedFile extends ReferenceResource {
         return fileChannel;
     }
 
+    /***
+     *
+     * @param msg 待追加到MappedFile的消息
+     * @param cb 回调函数
+     * @return
+     */
     public AppendMessageResult appendMessage(final MessageExtBrokerInner msg, final AppendMessageCallback cb) {
         return appendMessagesInner(msg, cb);
     }
@@ -211,13 +217,13 @@ public class MappedFile extends ReferenceResource {
      * @param messageExt
      * @param cb
      * @return
-     * 开始写入消息，并传递回调函数。此时消息只是写入到buffer缓冲区
+     * 开始写入消息，并传递回调函数。此时消息只是写入到buffer缓冲区，分为单条写入和批量写入。每次写入消息后，最新写入的位置wrotePosition都会相应的更新
      *
      */
     public AppendMessageResult appendMessagesInner(final MessageExt messageExt, final AppendMessageCallback cb) {
         assert messageExt != null;
         assert cb != null;
-        //当前已写的位置，也就是当前指针
+        //MappedFile中当前已写入的位置，也就是当前指针
         int currentPos = this.wrotePosition.get();
         //如果当前指针大于或等于文件大小，表示文件已写满
         if (currentPos < this.fileSize) {//当前文件还未写满
@@ -232,7 +238,9 @@ public class MappedFile extends ReferenceResource {
             } else {
                 return new AppendMessageResult(AppendMessageStatus.UNKNOWN_ERROR);
             }
+            //更新最新写入的位置wrotePosition
             this.wrotePosition.addAndGet(result.getWroteBytes());
+            //更新最新写入的时间
             this.storeTimestamp = result.getStoreTimestamp();
             return result;
         }
