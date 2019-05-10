@@ -39,9 +39,10 @@ public class AllocateMappedFileService extends ServiceThread {
     private static int waitTimeOut = 1000 * 5;
     private ConcurrentMap<String, AllocateRequest> requestTable =
         new ConcurrentHashMap<String, AllocateRequest>();
-    //存放分配MappedFile的请求
+    //存放分配MappedFile的请求。主要这是一个优先级队列，所以可以设置AllocateRequest的优先级来设置创建文件的优先级
     private PriorityBlockingQueue<AllocateRequest> requestQueue =
         new PriorityBlockingQueue<AllocateRequest>();
+    //用来标示在创建mmap过程中是否出现异常
     private volatile boolean hasException = false;
     private DefaultMessageStore messageStore;
 
@@ -171,8 +172,14 @@ public class AllocateMappedFileService extends ServiceThread {
     }
 
     /**
-     * 1、从队列requestQueue中弹出分配MappedFile的请求
-     * 2、解析需要申请的MappedFile
+     * 1、已阻塞的方式从队列requestQueue中弹出分配MappedFile的请求AllocateRequest
+     * 2、创建一个新的mappedFile：
+     *      如果开启了缓冲池，则从缓冲区里直接获取一个新的mappedFile.
+     *      如果未开启缓冲池，则直接根据文件名字和文件大小创建一个。
+     *
+     * 3、如果MappedFile 的大小等于或大于 CommitLog 的大小并且开启文件预热功能才会预加载文件
+     *      这里 MappedFile 已经创建，对应的 Buffer 为 mappedByteBuffer。mappedByteBuffer 已经通过 mmap 映射，此时操作系统中只是记录了该文件和该 Buffer 的映射关系，而没有映射到物理内存中。
+     *      这里就通过对该 MappedFile 的每个 Page Cache 进行写入一个字节，通过读写操作把 mmap 映射全部加载到物理内存中。
      */
     private boolean mmapOperation() {
         boolean isSuccess = false;
@@ -195,7 +202,7 @@ public class AllocateMappedFileService extends ServiceThread {
                 long beginTime = System.currentTimeMillis();
 
                 MappedFile mappedFile;
-                //如果开启了transientStorePoolEnable，则从TransientStorePool中直接获取预分配的buffer
+                //如果开启了transientStorePoolEnable，则从TransientStorePool中直接获取预分配的buffer并创建文件。
                 if (messageStore.getMessageStoreConfig().isTransientStorePoolEnable()) {
                     try {
                         mappedFile = ServiceLoader.load(MappedFile.class).iterator().next();
@@ -218,6 +225,8 @@ public class AllocateMappedFileService extends ServiceThread {
                 }
 
                 // pre write mappedFile
+                //如果MappedFile 的大小等于或大于 CommitLog 的大小并且开启文件预热功能才会预加载文件。
+
                 if (mappedFile.getFileSize() >= this.messageStore.getMessageStoreConfig()
                     .getMapedFileSizeCommitLog()
                     &&
