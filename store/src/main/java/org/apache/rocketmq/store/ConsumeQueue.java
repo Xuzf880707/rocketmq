@@ -343,6 +343,14 @@ public class ConsumeQueue {
         return cnt;
     }
 
+    /**8
+     * 调用correctMinOffset(long phyMinOffset)方法，根据物理队列的最小offset来修正逻辑队列的最小offset值。大致逻辑如下：
+     * 1）获取MapedFileQueue队列中第一个MapedFile对象，然后调用selectMapedBuffer(0)方法从第0位开始读取所有数据；
+     *
+     * 2）逐个解析获取到的数据的数据单元，检查每个消息单元中保存的物理偏移量（前8字节）是否大于等于最小物理偏移量，
+     *      若是则将此消息单元的位置加上该文件的起始偏移量作为ConsumeQueue数据的最小逻辑偏移量存于变量minLogicOffset中。
+     * @param phyMinOffset
+     */
     public void correctMinOffset(long phyMinOffset) {
         MappedFile mappedFile = this.mappedFileQueue.getFirstMappedFile();
         long minExtAddr = 1;
@@ -492,10 +500,12 @@ public class ConsumeQueue {
     }
 
     /***
-     * startIndex是消息消费队列的条目数
-     *      根据逻辑偏移量获取该消息的buffer块
-     * @param startIndex
+     * 根据消息序号索引获取consumequeue数据
+     * @param startIndex : 消息消费队列的条目数
      * @return
+     * 1、由于startIndex只是消息单元的序号，故需将startIndex乘以20方可得到起始偏移量offset，
+     * 2、然后调用MapedFileQueue对象的findMapedFileByteOffset方法根据该起始偏移量找到所在的文件，即对应的MapedFile对象
+     * ，然后调用MapedFile对象selectMapedBuffer(int pos)，其中pos等于起始偏移量offset除以文件大小（fileSize）的余数。
      */
     public SelectMappedBufferResult getIndexBuffer(final long startIndex) {
         int mappedFileSize = this.mappedFileSize;

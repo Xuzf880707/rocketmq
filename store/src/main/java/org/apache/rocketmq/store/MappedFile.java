@@ -414,14 +414,22 @@ public class MappedFile extends ReferenceResource {
         return this.fileSize == this.wrotePosition.get();
     }
 
+    /**
+     *  //返回从pos到 pos + size的内存映射
+     * @param pos 指定开始位置
+     * @param size 指定大小
+     * @return
+     */
     public SelectMappedBufferResult selectMappedBuffer(int pos, int size) {
         int readPosition = getReadPosition();
         if ((pos + size) <= readPosition) {
 
-            if (this.hold()) {
+            if (this.hold()) {//引用+1
+                //切片,复制一个byteBuffer(与原byteBuffer共享数据, 只是指针位置独立)
                 ByteBuffer byteBuffer = this.mappedByteBuffer.slice();
                 byteBuffer.position(pos);
                 ByteBuffer byteBufferNew = byteBuffer.slice();
+                //设置结束位置,byteBufferNew的[0,size) 与 原有的mappedByteBuffer的[pos,pos+size)相同
                 byteBufferNew.limit(size);
                 return new SelectMappedBufferResult(this.fileFromOffset + pos, byteBufferNew, size, this);
             } else {
@@ -436,16 +444,22 @@ public class MappedFile extends ReferenceResource {
         return null;
     }
 
+    /***
+     *
+     *  //返回从pos到最大有效位置的所有数据
+     * @param pos 选取buffer的开始位置
+     * @return
+     */
     public SelectMappedBufferResult selectMappedBuffer(int pos) {
-        int readPosition = getReadPosition();
-        if (pos < readPosition && pos >= 0) {
-            if (this.hold()) {
+        int readPosition = getReadPosition();//获取当前有效数据的最大位置
+        if (pos < readPosition && pos >= 0) {//返回的数据 必须是有效的
+            if (this.hold()) {//引用+1
                 ByteBuffer byteBuffer = this.mappedByteBuffer.slice();
                 byteBuffer.position(pos);
-                int size = readPosition - pos;
+                int size = readPosition - pos;//剩下的都返回
                 ByteBuffer byteBufferNew = byteBuffer.slice();
                 byteBufferNew.limit(size);
-                return new SelectMappedBufferResult(this.fileFromOffset + pos, byteBufferNew, size, this);
+                return new SelectMappedBufferResult(this.fileFromOffset + pos, byteBufferNew, size, this);//绝对offset,
             }
         }
 
