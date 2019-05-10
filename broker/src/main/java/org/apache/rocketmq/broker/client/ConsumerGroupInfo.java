@@ -245,4 +245,17 @@ public class ConsumerGroupInfo {
     public void setConsumeFromWhere(ConsumeFromWhere consumeFromWhere) {
         this.consumeFromWhere = consumeFromWhere;
     }
+
+    @Override
+    public String toString() {
+        return "ConsumerGroupInfo{" +
+                "groupName='" + groupName + '\'' +
+                ", subscriptionTable=" + subscriptionTable +
+                ", channelInfoTable=" + channelInfoTable +
+                ", consumeType=" + consumeType +
+                ", messageModel=" + messageModel +
+                ", consumeFromWhere=" + consumeFromWhere +
+                ", lastUpdateTimestamp=" + lastUpdateTimestamp +
+                '}';
+    }
 }

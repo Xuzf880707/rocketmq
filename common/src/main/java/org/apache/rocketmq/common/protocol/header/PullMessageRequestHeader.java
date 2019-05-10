@@ -139,4 +139,21 @@ public class PullMessageRequestHeader implements CommandCustomHeader {
     public void setExpressionType(String expressionType) {
         this.expressionType = expressionType;
     }
+
+    @Override
+    public String toString() {
+        return "PullMessageRequestHeader{" +
+                "consumerGroup='" + consumerGroup + '\'' +
+                ", topic='" + topic + '\'' +
+                ", queueId=" + queueId +
+                ", queueOffset=" + queueOffset +
+                ", maxMsgNums=" + maxMsgNums +
+                ", sysFlag=" + sysFlag +
+                ", commitOffset=" + commitOffset +
+                ", suspendTimeoutMillis=" + suspendTimeoutMillis +
+                ", subscription='" + subscription + '\'' +
+                ", subVersion=" + subVersion +
+                ", expressionType='" + expressionType + '\'' +
+                '}';
+    }
 }

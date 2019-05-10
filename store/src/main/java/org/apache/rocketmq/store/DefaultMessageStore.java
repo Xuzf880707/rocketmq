@@ -483,7 +483,7 @@ public class DefaultMessageStore implements MessageStore {
         }
 
         long beginTime = this.getSystemClock().now();
-
+        //初始化获得消息的返回状态
         GetMessageStatus status = GetMessageStatus.NO_MESSAGE_IN_QUEUE;
         long nextBeginOffset = offset;
         long minOffset = 0;
@@ -492,10 +492,13 @@ public class DefaultMessageStore implements MessageStore {
         GetMessageResult getResult = new GetMessageResult();
         //获得当前commitLog文件最大偏移量
         final long maxOffsetPy = this.commitLog.getMaxOffset();
+        System.out.println("maxOffsetPy="+maxOffsetPy);
         //根据topic和queueId查找对应的 ConsumeQueue
+        //consumeQueue=ConsumeQueue{defaultMessageStore=org.apache.rocketmq.store.DefaultMessageStore@51b5636f, mappedFileQueue=org.apache.rocketmq.store.MappedFileQueue@1329eff, topic='TOPIC_A', queueId=0, byteBufferIndex=java.nio.HeapByteBuffer[pos=0 lim=20 cap=20], storePath='/Users/hb/store/consumequeue', mappedFileSize=10485760, maxPhysicOffset=-1, minLogicOffset=0, consumeQueueExt=null}
         ConsumeQueue consumeQueue = findConsumeQueue(topic, queueId);
+        System.out.println("consumeQueue="+consumeQueue);
         if (consumeQueue != null) {
-            //
+            //查询当前consumeQueue最小offset和最大的offset(因为consumeQueue文件也会定时清理)
             minOffset = consumeQueue.getMinOffsetInQueue();
             maxOffset = consumeQueue.getMaxOffsetInQueue();
 
@@ -1114,7 +1117,74 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     public ConsumeQueue findConsumeQueue(String topic, int queueId) {
+        /***
+         {
+         FooBar = {
+             0 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @49504462, topic = 'FooBar', queueId = 0, byteBufferIndex = java.nio.HeapByteBuffer[pos = 20 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = 1161, minLogicOffset = 0, consumeQueueExt = null
+             }
+         },
+         SCHEDULE_TOPIC_XXXX = {
+             0 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @7318ee86, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 0, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             1 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @7ddf0e95, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 1, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             2 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @5883439d, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 2, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             3 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @79e085f6, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 3, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             4 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @12130f3, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 4, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             5 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @502d46d6, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 5, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             6 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @792b135a, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 6, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             7 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @3ce204ae, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 7, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             8 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @7026563f, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 8, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             9 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @29778354, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 9, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             10 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @6b22bfeb, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 10, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             11 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @45d502a4, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 11, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             12 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @3bf62012, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 12, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             13 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @430af15f, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 13, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             14 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @2ea71bb8, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 14, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             15 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @8bab16a, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 15, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             16 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @d94bd4e, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 16, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             },
+             17 = ConsumeQueue {
+             defaultMessageStore = org.apache.rocketmq.store.DefaultMessageStore @51b5636f, mappedFileQueue = org.apache.rocketmq.store.MappedFileQueue @5ccdfbe1, topic = 'SCHEDULE_TOPIC_XXXX', queueId = 17, byteBufferIndex = java.nio.HeapByteBuffer[pos = 0 lim = 20 cap = 20], storePath = '/Users/hb/store/consumequeue', mappedFileSize = 10485760, maxPhysicOffset = -1, minLogicOffset = 0, consumeQueueExt = null
+             }
+         }
+         }
+         */
         ConcurrentMap<Integer, ConsumeQueue> map = consumeQueueTable.get(topic);
+        System.out.println("consumeQueueTable="+consumeQueueTable);
+
         if (null == map) {
             ConcurrentMap<Integer, ConsumeQueue> newMap = new ConcurrentHashMap<Integer, ConsumeQueue>(128);
             ConcurrentMap<Integer, ConsumeQueue> oldMap = consumeQueueTable.putIfAbsent(topic, newMap);

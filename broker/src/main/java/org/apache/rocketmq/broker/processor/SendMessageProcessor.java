@@ -451,7 +451,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         return handlePutMessageResult(putMessageResult, response, request, msgInner, responseHeader, sendMessageContext, ctx, queueIdInt);
 
     }
-
+    //处理响应结果，重新封装了以下响应状态码
     private RemotingCommand handlePutMessageResult(PutMessageResult putMessageResult, RemotingCommand response,
                                                    RemotingCommand request, MessageExt msg,
                                                    SendMessageResponseHeader responseHeader, SendMessageContext sendMessageContext, ChannelHandlerContext ctx,

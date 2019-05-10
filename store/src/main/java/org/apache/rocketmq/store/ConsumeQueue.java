@@ -597,4 +597,20 @@ public class ConsumeQueue {
     public boolean isExtAddr(long tagsCode) {
         return ConsumeQueueExt.isExtAddr(tagsCode);
     }
+
+    @Override
+    public String toString() {
+        return "ConsumeQueue{" +
+                "defaultMessageStore=" + defaultMessageStore +
+                ", mappedFileQueue=" + mappedFileQueue +
+                ", topic='" + topic + '\'' +
+                ", queueId=" + queueId +
+                ", byteBufferIndex=" + byteBufferIndex +
+                ", storePath='" + storePath + '\'' +
+                ", mappedFileSize=" + mappedFileSize +
+                ", maxPhysicOffset=" + maxPhysicOffset +
+                ", minLogicOffset=" + minLogicOffset +
+                ", consumeQueueExt=" + consumeQueueExt +
+                '}';
+    }
 }

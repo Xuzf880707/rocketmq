@@ -743,6 +743,8 @@ public class CommitLog {
      * @param result
      * @param putMessageResult
      * @param messageExt
+     * 1、同步复制：
+     *      获得从服务器的发送服务，向从服务发送
      */
     public void handleHA(AppendMessageResult result, PutMessageResult putMessageResult, MessageExt messageExt) {
         if (BrokerRole.SYNC_MASTER == this.defaultMessageStore.getMessageStoreConfig().getBrokerRole()) {
