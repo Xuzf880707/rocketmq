@@ -93,7 +93,8 @@ public class PullMessageProcessor implements NettyRequestProcessor {
      * @param brokerAllowSuspend
      * @return
      * @throws RemotingCommandException
-     * 1、判断broker是否可读、组是否可消费、topic是否可消费，queueId的合法性
+     * 1、判断broker是否可读、组是否可消费、topic是否可消费，queueId的合法性。（有些broker内置的组和topic是不被允许消费的）
+     * 2、从commitLog中读取消息，并返回getMessageResult
      */
     private RemotingCommand processRequest(final Channel channel, RemotingCommand request, boolean brokerAllowSuspend)
         throws RemotingCommandException {
@@ -258,14 +259,12 @@ public class PullMessageProcessor implements NettyRequestProcessor {
         }
         //开始从MessageStore请求消息
         //getMessageResult=GetMessageResult [status=FOUND, nextBeginOffset=516, minOffset=100, maxOffset=1024, bufferTotalSize=0, suggestPullingFromSlave=false]
-        MessageStore store = this.brokerController.getMessageStore();
-
-
+        //
         final GetMessageResult getMessageResult =
             this.brokerController.getMessageStore().getMessage(requestHeader.getConsumerGroup(), requestHeader.getTopic(),
                 requestHeader.getQueueId(), requestHeader.getQueueOffset(), requestHeader.getMaxMsgNums(), messageFilter);
         System.out.println("getMessageResult="+getMessageResult);
-
+        //判断读取结果
         if (getMessageResult != null) {
             response.setRemark(getMessageResult.getStatus().name());
             responseHeader.setNextBeginOffset(getMessageResult.getNextBeginOffset());

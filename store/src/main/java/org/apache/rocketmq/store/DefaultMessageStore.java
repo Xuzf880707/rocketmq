@@ -468,6 +468,18 @@ public class DefaultMessageStore implements MessageStore {
      * @param maxMsgNums 最大拉取消息数
      * @param messageFilter 消息过滤器
      * @return
+     * 1、获取commitLog最大物理偏移量
+     * 2、根据topic、queueId查找定位consumeQueue
+     * 3、获取目标consumeQueue中最小offset和最大offset(最小offset不一定是0，因为有可能不是第一个consumeQueue)
+     * 4、检查minOffset、maxOffset和offset
+     *      maxOffset=0：该队列为空：
+     *          broker=slave: 则可能master还没来得及同步过来，则返回下次重新从目标offset开始消费。
+     *          broker=master：则说明consumeQueue为空，故告知消费者下次还是从0开始消费
+     *      offset<minOffset：该consumeQueue最小都比目标offset大:
+     *          broker=slave: 则返回下次重新从目标offset开始消费。
+     *          broker=master：则说明consumeQueue本身最小的offset都比目标offset大，故告知消费者下次还是从minOffset开始消费
+     *      offset == maxOffset：则返回下次重新从目标offset开始消费。
+     *
      */
     public GetMessageResult getMessage(final String group, final String topic, final int queueId, final long offset,
         final int maxMsgNums,
