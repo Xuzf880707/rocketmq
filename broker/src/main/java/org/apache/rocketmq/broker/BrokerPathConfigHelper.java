@@ -17,6 +17,8 @@
 
 package org.apache.rocketmq.broker;
 
+import org.omg.SendingContext.RunTime;
+
 import java.io.File;
 
 public class BrokerPathConfigHelper {
@@ -46,4 +48,5 @@ public class BrokerPathConfigHelper {
     public static String getConsumerFilterPath(final String rootDir) {
         return rootDir + File.separator + "config" + File.separator + "consumerFilter.json";
     }
+
 }
