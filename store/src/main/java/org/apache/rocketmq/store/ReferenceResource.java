@@ -45,7 +45,7 @@ public abstract class ReferenceResource {
      * @param intervalForcibly 表示拒绝被销毁的最大时间
      */
     public void shutdown(final long intervalForcibly) {
-        if (this.available) {//初次关闭的，这个available为true
+        if (this.available) {//如果当前文件可用，表示是初次关闭的，则需要先将当前文件设置成不可用
             this.available = false;
             this.firstShutdownTimestamp = System.currentTimeMillis();//设置初次关闭的时间
             this.release();//释放资源，release只有在引用数小于1的时候才会释放资源
@@ -58,15 +58,16 @@ public abstract class ReferenceResource {
     }
 
     /**
-     * 减少引用数
+     * 释放对该文件的引用的，同时会更新总的虚拟内存和虚拟内存文件的统计
      */
     public void release() {
+        //获得当前对当前文件的引用
         long value = this.refCount.decrementAndGet();
         if (value > 0)//如果引用数大于0的话，则不能被释放资源，直接返回
             return;
 
         synchronized (this) {
-
+            //更新虚拟内存的额统计和虚拟内存文件数的统计
             this.cleanupOver = this.cleanup(value);
         }
     }

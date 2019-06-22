@@ -64,7 +64,7 @@ public class MappedFile extends ReferenceResource {
      */
     //堆内存byteBuffer，它和MappedFile的buffer不是同一个,如果不为空，数据首先会先存到该buffer中，然后提交到MappedFile映射的内存buffer中，transientStorePoolEnable为true时不为空
     protected ByteBuffer writeBuffer = null;
-    //堆内存池
+    //堆内存池，用来提供一种内存锁定，将当前堆外内存锁定，避免被进程将内存交换到磁盘
     protected TransientStorePool transientStorePool = null;
     private String fileName;//文件名称
     private long fileFromOffset;//该文件的初拾偏移量
@@ -98,6 +98,7 @@ public class MappedFile extends ReferenceResource {
     public static void clean(final ByteBuffer buffer) {
         if (buffer == null || !buffer.isDirect() || buffer.capacity() == 0)
             return;
+        //如果是堆外内存，则直接调用堆外内存的cleanup进行清理
         invoke(invoke(viewed(buffer), "cleaner"), "clean");
     }
 
@@ -357,7 +358,7 @@ public class MappedFile extends ReferenceResource {
         if (this.isAbleToCommit(commitLeastPages)) {//判断是否满足本次最小的提交页数，如果不满足，则不执行本次提交操作
             if (this.hold()) {
                 commit0(commitLeastPages);
-                this.release();
+                this.release();//当缓冲区提交到文件的内存映射里，则释放对该mappedFile的引用
             } else {
                 log.warn("in commit, hold failed, commit offset = " + this.committedPosition.get());
             }
@@ -368,7 +369,7 @@ public class MappedFile extends ReferenceResource {
             this.transientStorePool.returnBuffer(writeBuffer);
             this.writeBuffer = null;
         }
-
+        //返回最新的已提交的偏移量
         return this.committedPosition.get();
     }
 
@@ -377,9 +378,9 @@ public class MappedFile extends ReferenceResource {
      * @param commitLeastPages
      */
     protected void commit0(final int commitLeastPages) {
-        int writePos = this.wrotePosition.get();
-        int lastCommittedPosition = this.committedPosition.get();
-
+        int writePos = this.wrotePosition.get();//获得已写的偏移量
+        int lastCommittedPosition = this.committedPosition.get();//获得已提交的偏移量
+        //如果未提交的偏移量大于0，将还为未提交的偏移量写入到文件的fileChannel里
         if (writePos - this.committedPosition.get() > 0) {
             try {
                 ByteBuffer byteBuffer = writeBuffer.slice();//首先创建writeBuffer共享缓冲区
@@ -512,18 +513,18 @@ public class MappedFile extends ReferenceResource {
 
     @Override
     public boolean cleanup(final long currentRef) {
-        if (this.isAvailable()) {
+        if (this.isAvailable()) {//如果文件还是可用，肯定不能清除缓存
             log.error("this file[REF:" + currentRef + "] " + this.fileName
                 + " have not shutdown, stop unmapping.");
             return false;
         }
-
+        //再次判断，文件是否清理过，如果是的话，直接返回true
         if (this.isCleanupOver()) {
             log.error("this file[REF:" + currentRef + "] " + this.fileName
                 + " have cleanup, do not do it again.");
             return true;
         }
-
+        //开始清除虚拟内存
         clean(this.mappedByteBuffer);
         TOTAL_MAPPED_VIRTUAL_MEMORY.addAndGet(this.fileSize * (-1));
         TOTAL_MAPPED_FILES.decrementAndGet();
@@ -541,7 +542,7 @@ public class MappedFile extends ReferenceResource {
     public boolean destroy(final long intervalForcibly) {
         this.shutdown(intervalForcibly);
 
-        if (this.isCleanupOver()) {//判断是否清理完成
+        if (this.isCleanupOver()) {//判断是否清理完成，只有已经清理完成了，且不可用了，才能销毁
             try {
                 this.fileChannel.close();//关闭通道
                 log.info("close file channel " + this.fileName + " OK");
