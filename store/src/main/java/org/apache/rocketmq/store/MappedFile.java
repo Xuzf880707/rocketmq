@@ -101,6 +101,13 @@ public class MappedFile extends ReferenceResource {
         invoke(invoke(viewed(buffer), "cleaner"), "clean");
     }
 
+    /***
+     * 反射访问方法
+     * @param target
+     * @param methodName
+     * @param args
+     * @return
+     */
     private static Object invoke(final Object target, final String methodName, final Class<?>... args) {
         return AccessController.doPrivileged(new PrivilegedAction<Object>() {
             public Object run() {
@@ -142,31 +149,43 @@ public class MappedFile extends ReferenceResource {
             return viewed(viewedBuffer);
     }
 
+    /***
+     * 获得总的MappedFiles个数
+     * @return
+     */
     public static int getTotalMappedFiles() {
         return TOTAL_MAPPED_FILES.get();
     }
 
+    /***
+     * 获得总的虚拟内存大小
+     *
+     * @return
+     */
     public static long getTotalMappedVirtualMemory() {
         return TOTAL_MAPPED_VIRTUAL_MEMORY.get();
     }
     //从transientStorePool中弹出一个预创建的buffer，并赋给writeBuffer
     public void init(final String fileName, final int fileSize,
         final TransientStorePool transientStorePool) throws IOException {
+        //创建一块文件大小的虚拟内存
         init(fileName, fileSize);
+        //从buffer线程池中分配一块对应的堆内存
         this.writeBuffer = transientStorePool.borrowBuffer();
         this.transientStorePool = transientStorePool;
     }
 
     private void init(final String fileName, final int fileSize) throws IOException {
-        this.fileName = fileName;
-        this.fileSize = fileSize;
+        this.fileName = fileName;//文件名称
+        this.fileSize = fileSize;//文件大小
         this.file = new File(fileName);
         this.fileFromOffset = Long.parseLong(this.file.getName());
         boolean ok = false;
-
+        //确认磁盘信息
         ensureDirOK(this.file.getParent());
 
         try {
+            //创建一个文件管道
             this.fileChannel = new RandomAccessFile(this.file, "rw").getChannel();
             //mappedByteBuffer是一个使用NIO的内存buffer，并映射到物理文件commitlog
             this.mappedByteBuffer = this.fileChannel.map(MapMode.READ_WRITE, 0, fileSize);
@@ -185,11 +204,11 @@ public class MappedFile extends ReferenceResource {
             }
         }
     }
-
+    //获得文件的最新更新时间
     public long getLastModifiedTimestamp() {
         return this.file.lastModified();
     }
-
+    //文件大小
     public int getFileSize() {
         return fileSize;
     }
@@ -323,7 +342,10 @@ public class MappedFile extends ReferenceResource {
     }
 
     /***
-     * 将commitLog冲刷到FileChannel，这里只有打开缓冲池的话才会进行提交
+     * 将commitLog冲刷到FileChannel。
+     *  这里只有打开缓冲池的话才会调用commit方法，因为只有采用直接内存池，writeBuffer才不会为空。
+     *
+     * 注意，提交只是 把它从直接内存提交到文件内存映射中，也就是虚拟内存
      * @param commitLeastPages
      * @return
      */
@@ -372,14 +394,24 @@ public class MappedFile extends ReferenceResource {
         }
     }
 
+    /***
+     * 判断满足刷盘的条件
+     * 1、文件满了
+     * 2、设置了flushLeastPages，则必须满足最少页
+     * 3、如果没设置flushLeastPages，这个直接刷盘
+     * @param flushLeastPages
+     * @return
+     */
     private boolean isAbleToFlush(final int flushLeastPages) {
+        //获得上一次刷盘的偏移量
         int flush = this.flushedPosition.get();
+        //获得已写偏移量
         int write = getReadPosition();
-
+        //文件满了，肯定刷盘啊
         if (this.isFull()) {
             return true;
         }
-
+        //如果设置了flushLeastPages，待刷盘的偏移量满足最小刷盘的页闲置，则刷盘
         if (flushLeastPages > 0) {
             return ((write / OS_PAGE_SIZE) - (flush / OS_PAGE_SIZE)) >= flushLeastPages;
         }
@@ -387,6 +419,14 @@ public class MappedFile extends ReferenceResource {
         return write > flush;
     }
 
+    /**
+     * 判断是否可提交
+     *       1、文件满了
+     *      * 2、设置了commitLeastPages，则必须满足最少页
+     *      * 3、如果没设置commitLeastPages，这个直接刷盘
+     * @param commitLeastPages
+     * @return
+     */
     protected boolean isAbleToCommit(final int commitLeastPages) {
         int flush = this.committedPosition.get();
         int write = this.wrotePosition.get();
@@ -402,6 +442,10 @@ public class MappedFile extends ReferenceResource {
         return write > flush;
     }
 
+    /**
+     * 获得已落盘的偏移量
+     * @return
+     */
     public int getFlushedPosition() {
         return flushedPosition.get();
     }
@@ -530,6 +574,8 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
+     * 如果是采用缓冲池，则获得缓冲区的怼内存中已写的维护
+     * 不然就获得虚拟内存映射区的提交位置
      * @return The max position which have valid data
      */
     public int getReadPosition() {
