@@ -582,11 +582,16 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             case CREATE_JUST:
                 break;
             case RUNNING:
+                //听着正在消费中的消息
                 this.consumeMessageService.shutdown();
+                //持久化offset：offset是异步提交的，为了避免重复消费，因此在关闭时，必须要对尚未提交的offset进行持久化
                 this.persistConsumerOffset();
+                //取消注册consumer：broker接收到这个命令后，将consumer从ConsumerManager中移除，然后通知这个消费者下的其他Consumer进行Rebalance。
                 this.mQClientFactory.unregisterConsumer(this.defaultMQPushConsumer.getConsumerGroup());
+                //关闭与nameServer和broker的连接
                 this.mQClientFactory.shutdown();
                 log.info("the consumer [{}] shutdown OK", this.defaultMQPushConsumer.getConsumerGroup());
+                //丢弃暂未处理的消息
                 this.rebalanceImpl.destroy();
                 this.serviceState = ServiceState.SHUTDOWN_ALREADY;
                 break;
@@ -610,8 +615,11 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
      *      初始化设置消息消费模式：顺序消费或并发无序消费，可通过registerMessageListener来注册设置
      *
      * 3、启动消息消费服务，开启定时清理等待超时的响应的消息的任务。
+     * 4、从nameServer上更新当前consumer订阅的topic信息
+     * 5、
      */
     public synchronized void start() throws MQClientException {
+        //启动准备工作
         switch (this.serviceState) {
             case CREATE_JUST:
                 log.info("the consumer [{}] start beginning. messageModel={}, isUnitMode={}", this.defaultMQPushConsumer.getConsumerGroup(),
@@ -699,10 +707,13 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             default:
                 break;
         }
-
+        //从nameServer上更新topic信息
         this.updateTopicSubscribeInfoWhenSubscriptionChanged();
+        //检查consumer配置
         this.mQClientFactory.checkClientInBroker();
+        //向broker发送心跳信息
         this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
+        //立即触发一次rebalance
         this.mQClientFactory.rebalanceImmediately();
     }
 
@@ -927,11 +938,16 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         return messageListenerInner;
     }
 
+    /***
+     * 从nameServer上更新topic信息
+     */
     private void updateTopicSubscribeInfoWhenSubscriptionChanged() {
+        //获取当前consumer订阅的所有的topic信息 key：topic
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
         if (subTable != null) {
             for (final Map.Entry<String, SubscriptionData> entry : subTable.entrySet()) {
                 final String topic = entry.getKey();
+                //从nameServer上更新每一个topic的路由信息
                 this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);
             }
         }
@@ -1084,6 +1100,9 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         return subSet;
     }
 
+    /***
+     * 会根据消费者指定的消息监听器是有序还是无序进行判定Rebalance过程中是否需要对有序消费进行特殊处理
+     */
     @Override
     public void doRebalance() {
         if (!this.pause) {

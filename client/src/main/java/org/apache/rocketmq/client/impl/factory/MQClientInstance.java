@@ -380,10 +380,8 @@ public class MQClientInstance {
     }
 
     public void updateTopicRouteInfoFromNameServer() {
-        Set<String> topicList = new HashSet<String>();
-
-        // Consumer 获得所有消费者订阅的主题信息
-        {
+        Set<String> topicList = new HashSet<String>();//需要更新路由信息的topic集合
+        {// Consumer 获得所有消费者订阅的主题信息
             Iterator<Entry<String, MQConsumerInner>> it = this.consumerTable.entrySet().iterator();
             while (it.hasNext()) {
                 Entry<String, MQConsumerInner> entry = it.next();
@@ -398,9 +396,7 @@ public class MQClientInstance {
                 }
             }
         }
-
-        // Producer 获得所有生产者发布的主题信息
-        {
+        {// Producer 获得所有生产者发布的主题信息
             Iterator<Entry<String, MQProducerInner>> it = this.producerTable.entrySet().iterator();
             while (it.hasNext()) {
                 Entry<String, MQProducerInner> entry = it.next();
@@ -410,8 +406,7 @@ public class MQClientInstance {
                     topicList.addAll(lst);
                 }
             }
-        }
-
+        }//逐一从nameServer更新每个Topic的路由信息
         for (String topic : topicList) {
             this.updateTopicRouteInfoFromNameServer(topic);
         }
@@ -467,7 +462,12 @@ public class MQClientInstance {
         }
     }
 
+    /***
+     * 检查broker上面对应的consumer
+     * @throws MQClientException
+     */
     public void checkClientInBroker() throws MQClientException {
+        //从本地内存里获取当前消费者信息，key是groupName，value是对应的消费者
         Iterator<Entry<String, MQConsumerInner>> it = this.consumerTable.entrySet().iterator();
 
         while (it.hasNext()) {
@@ -506,8 +506,9 @@ public class MQClientInstance {
     }
 
     /***
+     * 当Broker收到心跳请求后，将这个消费者注册到ConsumerManager中
      * 使用了重入锁
-     *    1、向broker发送心跳信息
+     *    1、向所有的broker发送心跳信息
      *    2、上传filter代码到
      */
     public void sendHeartbeatToAllBrokerWithLock() {
@@ -550,7 +551,7 @@ public class MQClientInstance {
             }
         }
     }
-    //从NameServer上根据指定主题查找路由信息
+    //从NameServer上根据指定主题查找路由信息并更新
     public boolean updateTopicRouteInfoFromNameServer(final String topic) {
         return updateTopicRouteInfoFromNameServer(topic, false, null);
     }
@@ -574,7 +575,8 @@ public class MQClientInstance {
     }
 
     /***
-     *
+     *向所有的broker发送心跳信息
+     * 当Broker收到心跳请求后，将这个消费者注册到ConsumerManager中。当Consumer数量变化时，Broker会主动通知其他消费者进行Rebalance。
      */
     private void sendHeartbeatToAllBroker() {
         final HeartbeatData heartbeatData = this.prepareHeartbeatData();
@@ -768,37 +770,30 @@ public class MQClientInstance {
      */
     private HeartbeatData prepareHeartbeatData() {
         HeartbeatData heartbeatData = new HeartbeatData();
-
-        // clientID
-        heartbeatData.setClientID(this.clientId);
-
+        heartbeatData.setClientID(this.clientId);// clientID
         // 遍历所有的消费者Consumer
         for (Map.Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
             MQConsumerInner impl = entry.getValue();
             if (impl != null) {
                 ConsumerData consumerData = new ConsumerData();
-                consumerData.setGroupName(impl.groupName());
-                consumerData.setConsumeType(impl.consumeType());
-                consumerData.setMessageModel(impl.messageModel());
-                consumerData.setConsumeFromWhere(impl.consumeFromWhere());
-                consumerData.getSubscriptionDataSet().addAll(impl.subscriptions());
+                consumerData.setGroupName(impl.groupName());//消费者组名称
+                consumerData.setConsumeType(impl.consumeType()); //消费类型：CONSUME_PASSIVELY OR CONSUME_ACTIVE
+                consumerData.setMessageModel(impl.messageModel());//消费模式：CLUSTERING OR BROADCASTING
+                consumerData.setConsumeFromWhere(impl.consumeFromWhere());//从什么位置开始消费
+                consumerData.getSubscriptionDataSet().addAll(impl.subscriptions());//订阅的topic和过滤信息
                 consumerData.setUnitMode(impl.isUnitMode());
-
                 heartbeatData.getConsumerDataSet().add(consumerData);
             }
         }
-
         // 遍历所有的生产者Producer
         for (Map.Entry<String/* group */, MQProducerInner> entry : this.producerTable.entrySet()) {
             MQProducerInner impl = entry.getValue();
             if (impl != null) {
                 ProducerData producerData = new ProducerData();
                 producerData.setGroupName(entry.getKey());
-
                 heartbeatData.getProducerDataSet().add(producerData);
             }
         }
-
         return heartbeatData;
     }
 
@@ -1062,6 +1057,9 @@ public class MQClientInstance {
     /***
      * 遍历当前 Client 包含的 consumerTable( Consumer集合 )，执行消息队列分配
      * 1、获得本地所有的消费者列表。然后对每个消费者进行重分配，移除不存在的topic对应的MessageQueue
+     *
+     * 不同的触发机制最终底层都调用了MQClientInstance的doRebalance方法，而在这个方法的源码中，并没有区分哪个消费者组需要进行Rebalance，
+     * 只要任意一个消费者组需要Rebalance，这台机器上启动的所有其他消费者，也都要进行Rebalance。
      */
     public void doRebalance() {
         //遍历本地缓存中所有的消费者，对每个消费者根据自己的订阅主题，更新订阅消息

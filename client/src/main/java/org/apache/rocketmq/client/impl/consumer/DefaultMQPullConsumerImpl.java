@@ -339,6 +339,9 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
         return result;
     }
 
+    /**
+     * 总认为是无序的，所以参数固定是false
+     */
     @Override
     public void doRebalance() {
         if (this.rebalanceImpl != null) {

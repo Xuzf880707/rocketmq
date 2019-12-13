@@ -74,19 +74,22 @@ public class TopicPublishInfo {
     //lastBrokerName：上一次选择的执行发送消息失败的Broker。第一次执行消息队列选择时，lastBrokerName为null
     //重试时候尽量避免连续两次的请求目标broker是同一个,也就是会规避上次MessageQueue所在的broker,否则还是很有可能再次失败
     public MessageQueue selectOneMessageQueue(final String lastBrokerName) {
+        //消息第一次发送，上一次发送选择的brokerName是null,直接采用round-robin选择一个broker
         if (lastBrokerName == null) {
             return selectOneMessageQueue();
-        } else {
+        } else {//消息发送失败重试(记录上一次失败的broker不是null),优先选择其它的broker上的队列
             int index = this.sendWhichQueue.getAndIncrement();
             for (int i = 0; i < this.messageQueueList.size(); i++) {
                 int pos = Math.abs(index++) % this.messageQueueList.size();
                 if (pos < 0)
                     pos = 0;
                 MessageQueue mq = this.messageQueueList.get(pos);
-                if (!mq.getBrokerName().equals(lastBrokerName)) {//如消息发送失败的话，下次消息队列选择最好规避上次失败的MessageQueue所在的broker
+                //如消息发送失败的话，下次消息队列选择最好规避上次失败的MessageQueue所在的broker
+                if (!mq.getBrokerName().equals(lastBrokerName)) {
                     return mq;
                 }
             }
+            //没有其它的broker可选的话，那么还是采用round-robin选择，这里可能还是会选择到上一次失败的broker
             return selectOneMessageQueue();
         }
     }

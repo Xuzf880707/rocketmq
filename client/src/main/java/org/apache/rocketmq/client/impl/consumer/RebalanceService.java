@@ -25,6 +25,9 @@ import org.apache.rocketmq.logging.InternalLogger;
  * 均衡消息队列服务，负责分配当前 Consumer 可消费的消息队列( MessageQueue )。
  */
 public class RebalanceService extends ServiceThread {
+    /***
+     * 周期性的的触发rebalance，默认是20s
+     */
     private static long waitInterval =
         Long.parseLong(System.getProperty(
             "rocketmq.client.rebalance.waitInterval", "20000"));
@@ -35,12 +38,13 @@ public class RebalanceService extends ServiceThread {
         this.mqClientFactory = mqClientFactory;
     }
 
+
     @Override
     public void run() {
         log.info(this.getServiceName() + " service started");
-
+        //如果 消费者么有停止，不断的for循环等待间隔时间，触发rebalance
         while (!this.isStopped()) {
-            //等待超时，每 20s 调用一次。
+            //等待超时，每 20s 调用一次。如果被唤醒了，就不需要等待了
             this.waitForRunning(waitInterval);
             this.mqClientFactory.doRebalance();
         }

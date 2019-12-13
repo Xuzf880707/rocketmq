@@ -222,12 +222,15 @@ public abstract class RebalanceImpl {
      *
      *   1、获取当前消费者订阅的主题列表，并进行遍历主题对每个主题进行重分配
      *
+     *
+     *  RocketMQ按照Topic维度进行Rebalance，会导致一个很严重的结果：如果一个消费者组订阅多个Topic，可能会出现分配不均，部分消费者处于空闲状态。
        */
     public void doRebalance(final boolean isOrder) {
         //获取当前consumer订阅的topic信息，从本地缓存里获取
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
         if (subTable != null) {
             //遍历消费者订阅的主题
+            //如果一个消费者订阅了多个Topic，会迭代每个Topic维度逐一触发Rebalance。
             for (final Map.Entry<String, SubscriptionData> entry : subTable.entrySet()) {
                 final String topic = entry.getKey();
                 try {
@@ -254,7 +257,7 @@ public abstract class RebalanceImpl {
      */
     private void rebalanceByTopic(final String topic, final boolean isOrder) {
         switch (messageModel) {
-            case BROADCASTING: {
+            case BROADCASTING: {//广播模式
                 Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
                 if (mqSet != null) {
                     boolean changed = this.updateProcessQueueTableInRebalance(topic, mqSet, isOrder);
@@ -273,9 +276,11 @@ public abstract class RebalanceImpl {
             }
             //获取 Topic 对应的消息队列和消费者们，并对其进行排序。因为各 Consumer 是在本地分配消息队列，排序后才能保证各 Consumer 顺序一致。
             case CLUSTERING: {
-                //根据主题从本地缓存中获取当前消费者负责的MessageQueue列表
+                //根据主题从本地缓存中获取队列集合。
+                //会从之前的缓存的Topic路由信息中获取；Topic路由信息会定时的进行更新。
                 Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
                 //根据topic和consumerGroup从broker中获取同一个组下的所有消费者列表。
+                //findConsumerIdList方法内部会会发送GET_CONSUMER_LIST_BY_GROUP给请求给任意一个Broker进行获取
                 List<String> cidAll = this.mQClientFactory.findConsumerIdList(topic, consumerGroup);
                 if (null == mqSet) {
                     if (!topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
@@ -288,10 +293,10 @@ public abstract class RebalanceImpl {
                 }
 
                 if (mqSet != null && cidAll != null) {
-                    //// 排序 消息队列 和 消费者数组。因为是在Client进行分配队列，排序后，各Client的顺序才能保持一致。
+                    //排序 消息队列 和 消费者数组。因为是在Client进行分配队列，排序后，各Client的顺序才能保持一致。
                     List<MessageQueue> mqAll = new ArrayList<MessageQueue>();
                     mqAll.addAll(mqSet);
-
+                    //对topic下的所有队列和消费者组下的所有的消费者进行排序
                     Collections.sort(mqAll);
                     Collections.sort(cidAll);
 
@@ -309,13 +314,14 @@ public abstract class RebalanceImpl {
                             e);
                         return;
                     }
-
+                    //分配结果处理(分配结果去重)
                     Set<MessageQueue> allocateResultSet = new HashSet<MessageQueue>();
                     if (allocateResult != null) {
                         allocateResultSet.addAll(allocateResult);
                     }
                     //当分配队列时，更新 Topic 对应的消息队列，并返回是否有变
                     boolean changed = this.updateProcessQueueTableInRebalance(topic, allocateResultSet, isOrder);
+                    //如果分配结果发生变化，则进行后续处理
                     if (changed) {
                         log.info(
                             "rebalanced result changed. allocateMessageQueueStrategyName={}, group={}, topic={}, clientId={}, mqAllSize={}, cidAllSize={}, rebalanceResultSize={}, rebalanceResultSet={}",
